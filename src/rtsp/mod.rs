@@ -1,5 +1,7 @@
 mod request;
 
+use std::str;
+
 use async_std::io;
 use async_std::net::{IpAddr, SocketAddr, TcpListener};
 use async_std::stream::StreamExt;
@@ -16,7 +18,12 @@ pub async fn serve(ip: IpAddr, port: u16) -> io::Result<()> {
 
         let req = Request::parse(&mut stream).await?;
 
-        println!("{} {:?} {:?}", req.method, req.headers, req.content);
+        println!(
+            "{} {:?} {:?}",
+            req.method,
+            req.headers,
+            str::from_utf8(&req.content).unwrap()
+        );
     }
 
     Ok(())
