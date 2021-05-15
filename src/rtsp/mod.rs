@@ -22,17 +22,9 @@ pub async fn serve(ip: IpAddr, port: u16) -> io::Result<()> {
         loop {
             let req = Request::parse(&mut stream).await?;
 
-            println!(
-                "req {} {:?} {:?}",
-                req.method,
-                req.headers,
-                str::from_utf8(&req.content).unwrap()
-            );
+            println!("req {} {:?} {:?}", req.method, req.headers, str::from_utf8(&req.content).unwrap());
 
-            let res = Response::new(
-                StatusCode::Ok,
-                hashmap! {"CSeq".into() => req.headers.get("CSeq").unwrap().into()},
-            );
+            let res = Response::new(StatusCode::Ok, hashmap! {"CSeq".into() => req.headers.get("CSeq").unwrap().into()});
 
             res.write(&mut stream).await?;
         }

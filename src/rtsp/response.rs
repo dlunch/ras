@@ -32,11 +32,7 @@ impl Response {
     where
         S: io::Write + Unpin,
     {
-        let status_line = format!(
-            "RTSP/1.0 {} {}\r\n",
-            self.status as usize,
-            self.status.as_string()
-        );
+        let status_line = format!("RTSP/1.0 {} {}\r\n", self.status as usize, self.status.as_string());
 
         stream.write(status_line.as_bytes()).await?;
 

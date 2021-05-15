@@ -48,10 +48,6 @@ impl Request {
             Vec::new()
         };
 
-        Ok(Self {
-            method,
-            headers,
-            content,
-        })
+        Ok(Self { method, headers, content })
     }
 }
