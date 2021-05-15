@@ -6,3 +6,5 @@ edition = "2018"
 
 [dependencies]
 async-std = { version = "^1.9", features = ["attributes"] }
+maplit = { version = "^1.0" }
+pretty_env_logger = { version = "^0.4" }
