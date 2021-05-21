@@ -37,19 +37,29 @@ pub struct Name {
     labels: Vec<String>,
 }
 
+pub enum ResourceType {
+    A = 1,
+    PTR = 12,
+    TXT = 16,
+    SRV = 33,
+}
+
+pub enum Class {
+    IN = 1,
+}
+
 pub struct Question {
-    qname: Name,
-    qtype: U16be,
-    qclass: U16be,
+    name: Name,
+    r#type: ResourceType,
+    class: Class,
 }
 
 pub struct ResourceRecord {
-    rrname: Name,
-    rrtype: U16be,
-    rrclass: U16be,
-    ttl: U32be,
-    rdlength: U16be,
-    rdata: Vec<u8>,
+    name: Name,
+    r#type: ResourceType,
+    class: Class,
+    ttl: u32,
+    data: Vec<u8>,
 }
 
 pub struct Packet {
@@ -76,4 +86,18 @@ impl Packet {
 
 pub fn cast<T>(data: &[u8]) -> &T {
     unsafe { &*(data.as_ptr() as *const T) }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    // tests are copied from https://github.com/librespot-org/libmdns/blob/master/src/dns_parser/parser.rs
+    #[test]
+    fn parse_simple_query() {
+        let query = b"\x06%\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x07example\x03com\x00\x00\x01\x00\x01";
+        let packet = Packet::parse(query);
+
+        assert_eq!(packet.header.id.get(), 1573);
+    }
 }
