@@ -1,3 +1,5 @@
+use std::str;
+
 use bitflags::bitflags;
 
 #[derive(Clone)]
@@ -45,6 +47,28 @@ pub struct Name {
     labels: Vec<String>,
 }
 
+impl Name {
+    pub fn parse(data: &[u8]) -> (usize, Self) {
+        let mut offset = 0;
+
+        let mut labels = Vec::new();
+        loop {
+            // TODO pointer
+            let length = data[offset] as usize;
+            if length == 0 {
+                break;
+            }
+
+            let label = &data[offset + 1..offset + 1 + length];
+            labels.push(str::from_utf8(label).unwrap().into());
+
+            offset += length + 1;
+        }
+
+        (offset, Self { labels })
+    }
+}
+
 pub enum ResourceType {
     A = 1,
     PTR = 12,
@@ -82,9 +106,26 @@ impl Packet {
     pub fn parse(raw: &[u8]) -> Self {
         let header = cast::<Header>(&raw);
 
+        let mut cursor = 12;
+
+        let mut questions = Vec::new();
+        for _ in 0..header.qd_count.get() {
+            let (name_len, name) = Name::parse(&raw[cursor..]);
+
+            let question = Question {
+                name,
+                r#type: ResourceType::A,
+                class: Class::IN,
+            };
+
+            questions.push(question);
+
+            cursor += name_len;
+        }
+
         Self {
             header: header.clone(),
-            questions: Vec::new(),
+            questions,
             answers: Vec::new(),
             nameservers: Vec::new(),
             additional: Vec::new(),
@@ -112,5 +153,10 @@ mod test {
         assert_eq!(packet.header.an_count.get(), 0);
         assert_eq!(packet.header.ns_count.get(), 0);
         assert_eq!(packet.header.ar_count.get(), 0);
+
+        assert_eq!(packet.questions.len(), 1);
+        assert_eq!(packet.questions[0].name.labels.len(), 2);
+        assert_eq!(packet.questions[0].name.labels[0], "example");
+        assert_eq!(packet.questions[0].name.labels[1], "com");
     }
 }
