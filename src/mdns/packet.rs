@@ -1,3 +1,5 @@
+use bitflags::bitflags;
+
 #[derive(Clone)]
 #[repr(C)]
 pub struct U16be {
@@ -22,11 +24,17 @@ impl U32be {
     }
 }
 
+bitflags! {
+    struct HeaderFlags: u16 {
+        const QUERY = 0b0000_0000_0000_0001;
+    }
+}
+
 #[repr(C)]
 #[derive(Clone)]
 pub struct Header {
     id: U16be,
-    flags: U16be,
+    flags: HeaderFlags,
     qd_count: U16be,
     an_count: U16be,
     ns_count: U16be,
@@ -99,5 +107,6 @@ mod test {
         let packet = Packet::parse(query);
 
         assert_eq!(packet.header.id.get(), 1573);
+        assert!(packet.header.flags & HeaderFlags::QUERY == HeaderFlags::QUERY);
     }
 }
