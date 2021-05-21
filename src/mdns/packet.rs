@@ -108,5 +108,9 @@ mod test {
 
         assert_eq!(packet.header.id.get(), 1573);
         assert!(packet.header.flags & HeaderFlags::QUERY == HeaderFlags::QUERY);
+        assert_eq!(packet.header.qd_count.get(), 1);
+        assert_eq!(packet.header.an_count.get(), 0);
+        assert_eq!(packet.header.ns_count.get(), 0);
+        assert_eq!(packet.header.ar_count.get(), 0);
     }
 }
