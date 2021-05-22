@@ -27,7 +27,7 @@ impl U32be {
 }
 
 bitflags! {
-    struct HeaderFlags: u16 {
+    struct HeaderFlags: u16 { // in big endian form
         const QUERY = 0b0000_0000_0000_0001;
     }
 }
@@ -65,10 +65,12 @@ impl Name {
             offset += length + 1;
         }
 
-        (offset, Self { labels })
+        (offset + 1, Self { labels })
     }
 }
 
+#[allow(clippy::upper_case_acronyms)]
+#[derive(Eq, PartialEq)]
 pub enum ResourceType {
     A = 1,
     PTR = 12,
@@ -76,8 +78,30 @@ pub enum ResourceType {
     SRV = 33,
 }
 
+impl ResourceType {
+    pub fn parse(raw: &U16be) -> Self {
+        match raw.get() {
+            1 => Self::A,
+            12 => Self::PTR,
+            16 => Self::TXT,
+            33 => Self::SRV,
+            unknown => panic!("Unknown resourcetype {}", unknown),
+        }
+    }
+}
+
+#[derive(Eq, PartialEq)]
 pub enum Class {
     IN = 1,
+}
+
+impl Class {
+    pub fn parse(raw: &U16be) -> Self {
+        match raw.get() {
+            1 => Self::IN,
+            unknown => panic!("Unknown class {}", unknown),
+        }
+    }
 }
 
 pub struct Question {
@@ -111,16 +135,19 @@ impl Packet {
         let mut questions = Vec::new();
         for _ in 0..header.qd_count.get() {
             let (name_len, name) = Name::parse(&raw[cursor..]);
+            cursor += name_len;
+
+            let r#type = cast::<U16be>(&raw[cursor..cursor + 2]);
+            let class = cast::<U16be>(&raw[cursor + 2..cursor + 4]);
+            cursor += 4;
 
             let question = Question {
                 name,
-                r#type: ResourceType::A,
-                class: Class::IN,
+                r#type: ResourceType::parse(r#type),
+                class: Class::parse(class),
             };
 
             questions.push(question);
-
-            cursor += name_len;
         }
 
         Self {
@@ -158,5 +185,7 @@ mod test {
         assert_eq!(packet.questions[0].name.labels.len(), 2);
         assert_eq!(packet.questions[0].name.labels[0], "example");
         assert_eq!(packet.questions[0].name.labels[1], "com");
+        assert!(packet.questions[0].r#type == ResourceType::A);
+        assert!(packet.questions[0].class == Class::IN);
     }
 }
