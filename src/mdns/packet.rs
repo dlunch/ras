@@ -150,6 +150,10 @@ impl Packet {
             questions.push(question);
         }
 
+        if cursor != raw.len() {
+            panic!("Some bytes left, raw: {:?}", raw)
+        }
+
         Self {
             header: header.clone(),
             questions,
