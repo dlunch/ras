@@ -1,4 +1,4 @@
-use std::str;
+use std::{mem::size_of, str};
 
 use bitflags::bitflags;
 
@@ -28,7 +28,7 @@ impl U32be {
 
 bitflags! {
     struct HeaderFlags: u16 { // in big endian form
-        const QUERY = 0b0000_0000_0000_0001;
+        const RESPONSE = 0b0000_0000_1000_0000;
     }
 }
 
@@ -48,24 +48,30 @@ pub struct Name {
 }
 
 impl Name {
-    pub fn parse(data: &[u8]) -> (usize, Self) {
-        let mut offset = 0;
+    pub fn parse(raw: &[u8], original: &[u8]) -> (usize, Self) {
+        let mut cursor = 0;
 
         let mut labels = Vec::new();
         loop {
-            // TODO pointer
-            let length = data[offset] as usize;
+            let length = raw[cursor] as usize;
             if length == 0 {
                 break;
             }
+            if length & 192 == 192 {
+                let offset = cast::<U16be>(&raw[cursor..cursor + 2]);
+                let offset = (offset.get() & !49152) as usize;
+                let result = Name::parse(&original[offset..], original);
 
-            let label = &data[offset + 1..offset + 1 + length];
-            labels.push(str::from_utf8(label).unwrap().into());
+                return (cursor + 2, result.1);
+            } else {
+                let label = &raw[cursor + 1..cursor + 1 + length];
+                labels.push(str::from_utf8(label).unwrap().into());
+            }
 
-            offset += length + 1;
+            cursor += length + 1;
         }
 
-        (offset + 1, Self { labels })
+        (cursor + 1, Self { labels })
     }
 }
 
@@ -110,12 +116,65 @@ pub struct Question {
     class: Class,
 }
 
+impl Question {
+    pub fn parse(raw: &[u8], original: &[u8]) -> (usize, Self) {
+        let mut cursor = 0;
+        let (name_len, name) = Name::parse(raw, original);
+        cursor += name_len;
+
+        let r#type = cast::<U16be>(&raw[cursor..cursor + 2]);
+        let class = cast::<U16be>(&raw[cursor + 2..cursor + 4]);
+        cursor += 4;
+
+        (
+            cursor,
+            Question {
+                name,
+                r#type: ResourceType::parse(r#type),
+                class: Class::parse(class),
+            },
+        )
+    }
+}
+
 pub struct ResourceRecord {
     name: Name,
     r#type: ResourceType,
     class: Class,
     ttl: u32,
     data: Vec<u8>,
+}
+
+impl ResourceRecord {
+    pub fn parse(raw: &[u8], original: &[u8]) -> (usize, Self) {
+        let mut cursor = 0;
+        let (name_len, name) = Name::parse(raw, original);
+        cursor += name_len;
+
+        let r#type = cast::<U16be>(&raw[cursor..cursor + 2]);
+        let class = cast::<U16be>(&raw[cursor + 2..cursor + 4]);
+        cursor += 4;
+
+        let ttl = cast::<U32be>(&raw[cursor..cursor + 4]);
+        cursor += 4;
+
+        let rd_len = cast::<U16be>(&raw[cursor..cursor + 2]);
+        cursor += 2;
+
+        let data = Vec::from(&raw[cursor..cursor + rd_len.get() as usize]);
+        cursor += rd_len.get() as usize;
+
+        (
+            cursor,
+            ResourceRecord {
+                name,
+                r#type: ResourceType::parse(r#type),
+                class: Class::parse(class),
+                ttl: ttl.get(),
+                data,
+            },
+        )
+    }
 }
 
 pub struct Packet {
@@ -130,24 +189,22 @@ impl Packet {
     pub fn parse(raw: &[u8]) -> Self {
         let header = cast::<Header>(&raw);
 
-        let mut cursor = 12;
+        let mut cursor = size_of::<Header>();
 
         let mut questions = Vec::new();
         for _ in 0..header.qd_count.get() {
-            let (name_len, name) = Name::parse(&raw[cursor..]);
-            cursor += name_len;
-
-            let r#type = cast::<U16be>(&raw[cursor..cursor + 2]);
-            let class = cast::<U16be>(&raw[cursor + 2..cursor + 4]);
-            cursor += 4;
-
-            let question = Question {
-                name,
-                r#type: ResourceType::parse(r#type),
-                class: Class::parse(class),
-            };
+            let (len, question) = Question::parse(&raw[cursor..], raw);
+            cursor += len;
 
             questions.push(question);
+        }
+
+        let mut answers = Vec::new();
+        for _ in 0..header.an_count.get() {
+            let (len, answer) = ResourceRecord::parse(&raw[cursor..], raw);
+            cursor += len;
+
+            answers.push(answer);
         }
 
         if cursor != raw.len() {
@@ -157,7 +214,7 @@ impl Packet {
         Self {
             header: header.clone(),
             questions,
-            answers: Vec::new(),
+            answers,
             nameservers: Vec::new(),
             additional: Vec::new(),
         }
@@ -179,7 +236,7 @@ mod test {
         let packet = Packet::parse(query);
 
         assert_eq!(packet.header.id.get(), 1573);
-        assert!(packet.header.flags & HeaderFlags::QUERY == HeaderFlags::QUERY);
+        assert!(!packet.header.flags.contains(HeaderFlags::RESPONSE));
         assert_eq!(packet.header.qd_count.get(), 1);
         assert_eq!(packet.header.an_count.get(), 0);
         assert_eq!(packet.header.ns_count.get(), 0);
@@ -191,5 +248,32 @@ mod test {
         assert_eq!(packet.questions[0].name.labels[1], "com");
         assert!(packet.questions[0].r#type == ResourceType::A);
         assert!(packet.questions[0].class == Class::IN);
+    }
+
+    #[test]
+    fn parse_simple_response() {
+        let response =  b"\x06%\x81\x80\x00\x01\x00\x01\x00\x00\x00\x00\x07example\x03com\x00\x00\x01\x00\x01\xc0\x0c\x00\x01\x00\x01\x00\x00\x04\xf8\x00\x04]\xb8\xd8\"";
+        let packet = Packet::parse(response);
+
+        assert_eq!(packet.header.id.get(), 1573);
+        assert!(packet.header.flags.contains(HeaderFlags::RESPONSE));
+        assert_eq!(packet.header.qd_count.get(), 1);
+        assert_eq!(packet.header.an_count.get(), 1);
+        assert_eq!(packet.header.ns_count.get(), 0);
+        assert_eq!(packet.header.ar_count.get(), 0);
+
+        assert_eq!(packet.questions.len(), 1);
+        assert_eq!(packet.questions[0].name.labels.len(), 2);
+        assert_eq!(packet.questions[0].name.labels[0], "example");
+        assert_eq!(packet.questions[0].name.labels[1], "com");
+        assert!(packet.questions[0].r#type == ResourceType::A);
+        assert!(packet.questions[0].class == Class::IN);
+
+        assert_eq!(packet.answers.len(), 1);
+        assert_eq!(packet.answers[0].name.labels.len(), 2);
+        assert_eq!(packet.answers[0].name.labels[0], "example");
+        assert_eq!(packet.answers[0].name.labels[1], "com");
+        assert!(packet.answers[0].r#type == ResourceType::A);
+        assert!(packet.answers[0].class == Class::IN);
     }
 }
