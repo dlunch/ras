@@ -9,8 +9,16 @@ pub struct U16be {
 }
 
 impl U16be {
+    pub fn new(value: u16) -> Self {
+        Self { raw: value.to_be_bytes() }
+    }
+
     pub fn get(&self) -> u16 {
         u16::from_be_bytes(self.raw)
+    }
+
+    pub fn raw(&self) -> &[u8] {
+        &self.raw
     }
 }
 
@@ -21,8 +29,16 @@ pub struct U32be {
 }
 
 impl U32be {
+    pub fn new(value: u32) -> Self {
+        Self { raw: value.to_be_bytes() }
+    }
+
     pub fn get(&self) -> u32 {
         u32::from_be_bytes(self.raw)
+    }
+
+    pub fn raw(&self) -> &[u8] {
+        &self.raw
     }
 }
 
@@ -73,10 +89,27 @@ impl Name {
 
         (cursor + 1, Self { labels })
     }
+
+    pub fn write(&self, buf: &mut [u8]) -> usize {
+        let mut cursor = 0;
+
+        for label in &self.labels {
+            buf[cursor] = label.len() as u8;
+            cursor += 1;
+
+            buf[cursor..cursor + label.len()].copy_from_slice(label.as_bytes());
+            cursor += label.len();
+        }
+
+        buf[cursor] = 0;
+        cursor += 1;
+
+        cursor
+    }
 }
 
 #[allow(clippy::upper_case_acronyms)]
-#[derive(Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq)]
 pub enum ResourceType {
     A = 1,
     PTR = 12,
@@ -96,7 +129,7 @@ impl ResourceType {
     }
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq)]
 pub enum Class {
     IN = 1,
 }
@@ -134,6 +167,18 @@ impl Question {
                 class: Class::parse(class),
             },
         )
+    }
+
+    pub fn write(&self, buf: &mut [u8]) -> usize {
+        let mut cursor = self.name.write(buf);
+
+        buf[cursor..cursor + 2].copy_from_slice(U16be::new(self.r#type as u16).raw());
+        cursor += 2;
+
+        buf[cursor..cursor + 2].copy_from_slice(U16be::new(self.class as u16).raw());
+        cursor += 2;
+
+        cursor
     }
 }
 
@@ -174,6 +219,27 @@ impl ResourceRecord {
                 data,
             },
         )
+    }
+
+    pub fn write(&self, buf: &mut [u8]) -> usize {
+        let mut cursor = self.name.write(buf);
+
+        buf[cursor..cursor + 2].copy_from_slice(U16be::new(self.r#type as u16).raw());
+        cursor += 2;
+
+        buf[cursor..cursor + 2].copy_from_slice(U16be::new(self.class as u16).raw());
+        cursor += 2;
+
+        buf[cursor..cursor + 4].copy_from_slice(U32be::new(self.ttl).raw());
+        cursor += 4;
+
+        buf[cursor..cursor + 2].copy_from_slice(U16be::new(self.data.len() as u16).raw());
+        cursor += 2;
+
+        buf[cursor..cursor + self.data.len()].copy_from_slice(&self.data);
+        cursor += self.data.len();
+
+        cursor
     }
 }
 
@@ -219,10 +285,31 @@ impl Packet {
             additional: Vec::new(),
         }
     }
+
+    pub fn write(&self, mut buf: &mut [u8]) -> usize {
+        let mut cursor = 0;
+
+        buf[0..size_of::<Header>()].copy_from_slice(cast_bytes(&self.header));
+        cursor += size_of::<Header>();
+
+        for question in &self.questions {
+            cursor += question.write(&mut buf[cursor..]);
+        }
+
+        for answer in &self.answers {
+            cursor += answer.write(&mut buf[cursor..]);
+        }
+
+        cursor
+    }
 }
 
 pub fn cast<T>(data: &[u8]) -> &T {
     unsafe { &*(data.as_ptr() as *const T) }
+}
+
+pub fn cast_bytes<T>(data: &T) -> &[u8] {
+    unsafe { std::slice::from_raw_parts((data as *const T) as *const u8, size_of::<T>()) }
 }
 
 #[cfg(test)]
@@ -248,10 +335,49 @@ mod test {
         assert_eq!(packet.questions[0].name.labels[1], "com");
         assert!(packet.questions[0].r#type == ResourceType::A);
         assert!(packet.questions[0].class == Class::IN);
+
+        let mut buf = vec![0; 512];
+        let len = packet.write(&mut buf);
+
+        assert_eq!(len, query.len());
+        assert_eq!(&buf[..len], query);
     }
 
     #[test]
     fn parse_simple_response() {
+        let response =  b"\x06%\x81\x80\x00\x01\x00\x01\x00\x00\x00\x00\x07example\x03com\x00\x00\x01\x00\x01\x07example\x03com\x00\x00\x01\x00\x01\x00\x00\x04\xf8\x00\x04]\xb8\xd8\"";
+        let packet = Packet::parse(response);
+
+        assert_eq!(packet.header.id.get(), 1573);
+        assert!(packet.header.flags.contains(HeaderFlags::RESPONSE));
+        assert_eq!(packet.header.qd_count.get(), 1);
+        assert_eq!(packet.header.an_count.get(), 1);
+        assert_eq!(packet.header.ns_count.get(), 0);
+        assert_eq!(packet.header.ar_count.get(), 0);
+
+        assert_eq!(packet.questions.len(), 1);
+        assert_eq!(packet.questions[0].name.labels.len(), 2);
+        assert_eq!(packet.questions[0].name.labels[0], "example");
+        assert_eq!(packet.questions[0].name.labels[1], "com");
+        assert!(packet.questions[0].r#type == ResourceType::A);
+        assert!(packet.questions[0].class == Class::IN);
+
+        assert_eq!(packet.answers.len(), 1);
+        assert_eq!(packet.answers[0].name.labels.len(), 2);
+        assert_eq!(packet.answers[0].name.labels[0], "example");
+        assert_eq!(packet.answers[0].name.labels[1], "com");
+        assert!(packet.answers[0].r#type == ResourceType::A);
+        assert!(packet.answers[0].class == Class::IN);
+
+        let mut buf = vec![0; 512];
+        let len = packet.write(&mut buf);
+
+        assert_eq!(len, response.len());
+        assert_eq!(&buf[..len], response);
+    }
+
+    #[test]
+    fn parse_simple_response_with_name_pointer() {
         let response =  b"\x06%\x81\x80\x00\x01\x00\x01\x00\x00\x00\x00\x07example\x03com\x00\x00\x01\x00\x01\xc0\x0c\x00\x01\x00\x01\x00\x00\x04\xf8\x00\x04]\xb8\xd8\"";
         let packet = Packet::parse(response);
 
