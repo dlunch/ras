@@ -1,32 +1,31 @@
 mod packet;
 
-use async_std::io;
-use async_std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
-use log::trace;
-use socket2::{Domain, Protocol, SockAddr, Socket, Type};
+use std::{
+    io,
+    net::{Ipv4Addr, SocketAddrV4},
+    sync::Arc,
+};
+
+use async_std::task::spawn_blocking;
+use log::debug;
+use multicast_socket::MulticastSocket;
 
 use packet::Packet;
 
 pub async fn serve(service_type: &str, service_name: &str, service_port: u16, txt: &[&'static str]) -> io::Result<()> {
-    let any = Ipv4Addr::new(0, 0, 0, 0);
     let mdns_addr = Ipv4Addr::new(224, 0, 0, 251);
 
-    let raw_socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))?;
-    raw_socket.set_reuse_address(true)?;
-    raw_socket.bind(&SockAddr::from(SocketAddr::new(IpAddr::V4(any), 5353)))?;
-    raw_socket.join_multicast_v4(&mdns_addr, &any)?;
-
-    let socket = UdpSocket::from(std::net::UdpSocket::from(raw_socket.try_clone()?));
+    let socket = Arc::new(MulticastSocket::all_interfaces(SocketAddrV4::new(mdns_addr, 5353))?);
 
     loop {
-        let mut buf = [0; 2048];
-        let (_, remote_addr) = socket.recv_from(&mut buf).await?;
+        let socket2 = socket.clone();
+        let message = spawn_blocking(move || socket2.receive()).await?;
+        debug!("receive from {}, raw {:?}", message.origin_address, message.data);
 
-        let packet = Packet::parse(&buf);
-
+        let packet = Packet::parse(&message.data);
         if packet.header.is_query() {
             for question in &packet.questions {
-                trace!("question {}", question.name);
+                debug!("question {}", question.name);
 
                 if question.name.equals(service_type) {
                     // TODO
@@ -34,11 +33,9 @@ pub async fn serve(service_type: &str, service_name: &str, service_port: u16, tx
             }
         }
 
-        // set multicast response interface
-        if let IpAddr::V4(x) = remote_addr.ip() {
-            raw_socket.set_multicast_if_v4(&x)?;
-        }
-    }
+        let response = vec![0, 0];
 
-    Ok(())
+        debug!("sending response to {:?}, raw {:?}", message.origin_address, response);
+        socket.send(&response, &message.interface)?;
+    }
 }
