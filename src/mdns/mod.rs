@@ -4,11 +4,12 @@ use std::{
     io,
     net::{Ipv4Addr, SocketAddrV4},
     sync::Arc,
+    time::Duration,
 };
 
 use async_std::task::spawn_blocking;
 use log::debug;
-use multicast_socket::MulticastSocket;
+use multicast_socket::{all_ipv4_interfaces, MulticastOptions, MulticastSocket};
 
 use packet::Packet;
 
@@ -22,11 +23,30 @@ pub struct Service {
 pub async fn serve(service: &Service) -> io::Result<()> {
     let mdns_addr = Ipv4Addr::new(224, 0, 0, 251);
 
-    let socket = Arc::new(MulticastSocket::all_interfaces(SocketAddrV4::new(mdns_addr, 5353))?);
+    let interfaces = all_ipv4_interfaces()?;
+    let socket = Arc::new(MulticastSocket::with_options(
+        SocketAddrV4::new(mdns_addr, 5353),
+        interfaces,
+        MulticastOptions {
+            read_timeout: Duration::from_secs(60), // MulticastSocket doesn't let us to use infinite timeout here
+            loopback: false,
+            buffer_size: 2048,
+            bind_address: Ipv4Addr::UNSPECIFIED,
+        },
+    )?);
 
     loop {
         let socket2 = socket.clone();
-        let message = spawn_blocking(move || socket2.receive()).await?;
+        let message = spawn_blocking(move || loop {
+            let result = socket2.receive();
+            if let Err(x) = &result {
+                if x.kind() == io::ErrorKind::TimedOut {
+                    continue;
+                }
+            }
+            return result;
+        })
+        .await?;
         debug!("receive from {}, raw {:?}", message.origin_address, message.data);
 
         let response = handle_packet(&message.data, &service);
