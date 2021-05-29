@@ -64,8 +64,8 @@ impl Header {
         !self.flags.contains(HeaderFlags::RESPONSE)
     }
 
-    pub fn is_response(&self) -> bool {
-        self.flags.contains(HeaderFlags::RESPONSE)
+    pub fn id(&self) -> u16 {
+        self.id.get()
     }
 }
 
@@ -274,6 +274,25 @@ pub struct Packet {
 }
 
 impl Packet {
+    pub fn new_response(id: u16) -> Self {
+        let header = Header {
+            id: U16be::new(id),
+            flags: HeaderFlags::RESPONSE,
+            qd_count: U16be::new(0),
+            an_count: U16be::new(0),
+            ns_count: U16be::new(0),
+            ar_count: U16be::new(0),
+        };
+
+        Self {
+            header,
+            questions: Vec::new(),
+            answers: Vec::new(),
+            nameservers: Vec::new(),
+            additional: Vec::new(),
+        }
+    }
+
     pub fn parse(raw: &[u8]) -> Option<Self> {
         if raw.len() < size_of::<Header>() {
             return None;
@@ -311,7 +330,7 @@ impl Packet {
         })
     }
 
-    pub fn write(&self, mut buf: &mut [u8]) -> usize {
+    pub fn write(&self, buf: &mut [u8]) -> usize {
         let mut cursor = 0;
 
         buf[0..size_of::<Header>()].copy_from_slice(cast_bytes(&self.header));
@@ -374,7 +393,7 @@ mod test {
         let packet = Packet::parse(response).unwrap();
 
         assert_eq!(packet.header.id.get(), 1573);
-        assert!(packet.header.is_response());
+        assert!(!packet.header.is_query());
         assert_eq!(packet.header.qd_count.get(), 1);
         assert_eq!(packet.header.an_count.get(), 1);
         assert_eq!(packet.header.ns_count.get(), 0);
@@ -407,7 +426,7 @@ mod test {
         let packet = Packet::parse(response).unwrap();
 
         assert_eq!(packet.header.id.get(), 1573);
-        assert!(packet.header.is_response());
+        assert!(!packet.header.is_query());
         assert_eq!(packet.header.qd_count.get(), 1);
         assert_eq!(packet.header.an_count.get(), 1);
         assert_eq!(packet.header.ns_count.get(), 0);
