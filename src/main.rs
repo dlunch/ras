@@ -16,20 +16,25 @@ async fn main() -> Result<(), Box<dyn Error>> {
     });
 
     let mdns_join_handle = spawn(async {
-        let txt = vec![
-            "am=AppleTV3,2",
-            "cn=0,1,2,3",
-            "da=true",
-            "et=0,3,5",
-            "md=0,1,2",
-            "sf=0x4",
-            "tp=UDP",
-            "vn=65537",
-            "vs=220.68",
-            "vv=2",
-        ];
+        let service = mdns::Service {
+            r#type: "_raop._tcp",
+            name: "tcp",
+            port: 7000,
+            txt: vec![
+                "am=AppleTV3,2",
+                "cn=0,1,2,3",
+                "da=true",
+                "et=0,3,5",
+                "md=0,1,2",
+                "sf=0x4",
+                "tp=UDP",
+                "vn=65537",
+                "vs=220.68",
+                "vv=2",
+            ],
+        };
 
-        mdns::serve("_raop._tcp", "test", 7000, &txt).await.unwrap();
+        mdns::serve(&service).await.unwrap();
     });
 
     join!(rtsp_join_handle, mdns_join_handle);
