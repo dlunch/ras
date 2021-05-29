@@ -274,7 +274,10 @@ pub struct Packet {
 }
 
 impl Packet {
-    pub fn parse(raw: &[u8]) -> Self {
+    pub fn parse(raw: &[u8]) -> Option<Self> {
+        if raw.len() < size_of::<Header>() {
+            return None;
+        }
         let header = cast::<Header>(&raw);
 
         let mut cursor = size_of::<Header>();
@@ -299,13 +302,13 @@ impl Packet {
             panic!("Some bytes left, raw: {:?}", raw)
         }
 
-        Self {
+        Some(Self {
             header: header.clone(),
             questions,
             answers,
             nameservers: Vec::new(),
             additional: Vec::new(),
-        }
+        })
     }
 
     pub fn write(&self, mut buf: &mut [u8]) -> usize {
@@ -342,7 +345,7 @@ mod test {
     #[test]
     fn parse_simple_query() {
         let query = b"\x06%\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x07example\x03com\x00\x00\x01\x00\x01";
-        let packet = Packet::parse(query);
+        let packet = Packet::parse(query).unwrap();
 
         assert_eq!(packet.header.id.get(), 1573);
         assert!(packet.header.is_query());
@@ -368,7 +371,7 @@ mod test {
     #[test]
     fn parse_simple_response() {
         let response =  b"\x06%\x81\x80\x00\x01\x00\x01\x00\x00\x00\x00\x07example\x03com\x00\x00\x01\x00\x01\x07example\x03com\x00\x00\x01\x00\x01\x00\x00\x04\xf8\x00\x04]\xb8\xd8\"";
-        let packet = Packet::parse(response);
+        let packet = Packet::parse(response).unwrap();
 
         assert_eq!(packet.header.id.get(), 1573);
         assert!(packet.header.is_response());
@@ -401,7 +404,7 @@ mod test {
     #[test]
     fn parse_simple_response_with_name_pointer() {
         let response =  b"\x06%\x81\x80\x00\x01\x00\x01\x00\x00\x00\x00\x07example\x03com\x00\x00\x01\x00\x01\xc0\x0c\x00\x01\x00\x01\x00\x00\x04\xf8\x00\x04]\xb8\xd8\"";
-        let packet = Packet::parse(response);
+        let packet = Packet::parse(response).unwrap();
 
         assert_eq!(packet.header.id.get(), 1573);
         assert!(packet.header.is_response());

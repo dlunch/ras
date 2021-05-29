@@ -39,7 +39,7 @@ pub async fn serve(service: &Service) -> io::Result<()> {
 }
 
 fn handle_packet(data: &[u8], service: &Service) -> Option<Vec<u8>> {
-    let packet = Packet::parse(&data);
+    let packet = Packet::parse(&data)?;
     if packet.header.is_query() {
         for question in &packet.questions {
             debug!("question {}", question.name);
