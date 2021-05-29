@@ -558,6 +558,7 @@ dependencies = [
  "async-std",
  "bitflags",
  "futures",
+ "log",
  "maplit",
  "pretty_env_logger",
 ]
