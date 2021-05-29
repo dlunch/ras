@@ -45,10 +45,22 @@ fn handle_packet(data: &[u8], service: &Service) -> Option<Vec<u8>> {
             debug!("question {}", question.name);
 
             if question.name.equals(service.r#type) {
-                // TODO
+                let response = create_response(packet.header.id(), service);
+
+                let mut buf = vec![0; 2048];
+                let len = response.write(&mut buf);
+                buf.resize(len, 0);
+
+                return Some(buf);
             }
         }
     }
 
-    Some(vec![0, 0])
+    None
+}
+
+fn create_response(id: u16, service: &Service) -> Packet {
+    // WIP
+
+    Packet::new_response(id)
 }
