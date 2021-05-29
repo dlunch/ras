@@ -2,6 +2,7 @@ mod packet;
 
 use async_std::io;
 use async_std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
+use log::trace;
 
 use packet::Packet;
 
@@ -17,6 +18,16 @@ pub async fn serve(service_type: &str, service_name: &str, service_port: u16, tx
         socket.recv_from(&mut buf).await?;
 
         let packet = Packet::parse(&buf);
+
+        if packet.header.is_query() {
+            for question in &packet.questions {
+                trace!("question {}", question.name);
+
+                if question.name.equals(service_type) {
+                    // TODO
+                }
+            }
+        }
 
         // we should set IP_MULTICAST_IF on multicast response
     }

@@ -1,4 +1,4 @@
-use std::{mem::size_of, str};
+use std::{fmt, mem::size_of, str};
 
 use bitflags::bitflags;
 
@@ -59,6 +59,16 @@ pub struct Header {
     ar_count: U16be,
 }
 
+impl Header {
+    pub fn is_query(&self) -> bool {
+        !self.flags.contains(HeaderFlags::RESPONSE)
+    }
+
+    pub fn is_response(&self) -> bool {
+        self.flags.contains(HeaderFlags::RESPONSE)
+    }
+}
+
 pub struct Name {
     labels: Vec<String>,
 }
@@ -106,6 +116,18 @@ impl Name {
 
         cursor
     }
+
+    pub fn equals(&self, other: &str) -> bool {
+        let split = other.split('.').collect::<Vec<_>>();
+
+        self.labels == split
+    }
+}
+
+impl fmt::Display for Name {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        fmt.write_str(&self.labels.join("."))
+    }
 }
 
 #[allow(clippy::upper_case_acronyms)]
@@ -144,7 +166,7 @@ impl Class {
 }
 
 pub struct Question {
-    name: Name,
+    pub name: Name,
     r#type: ResourceType,
     class: Class,
 }
@@ -244,11 +266,11 @@ impl ResourceRecord {
 }
 
 pub struct Packet {
-    header: Header,
-    questions: Vec<Question>,
-    answers: Vec<ResourceRecord>,
-    nameservers: Vec<ResourceRecord>,
-    additional: Vec<ResourceRecord>,
+    pub header: Header,
+    pub questions: Vec<Question>,
+    pub answers: Vec<ResourceRecord>,
+    pub nameservers: Vec<ResourceRecord>,
+    pub additional: Vec<ResourceRecord>,
 }
 
 impl Packet {
@@ -323,7 +345,7 @@ mod test {
         let packet = Packet::parse(query);
 
         assert_eq!(packet.header.id.get(), 1573);
-        assert!(!packet.header.flags.contains(HeaderFlags::RESPONSE));
+        assert!(packet.header.is_query());
         assert_eq!(packet.header.qd_count.get(), 1);
         assert_eq!(packet.header.an_count.get(), 0);
         assert_eq!(packet.header.ns_count.get(), 0);
@@ -349,7 +371,7 @@ mod test {
         let packet = Packet::parse(response);
 
         assert_eq!(packet.header.id.get(), 1573);
-        assert!(packet.header.flags.contains(HeaderFlags::RESPONSE));
+        assert!(packet.header.is_response());
         assert_eq!(packet.header.qd_count.get(), 1);
         assert_eq!(packet.header.an_count.get(), 1);
         assert_eq!(packet.header.ns_count.get(), 0);
@@ -382,7 +404,7 @@ mod test {
         let packet = Packet::parse(response);
 
         assert_eq!(packet.header.id.get(), 1573);
-        assert!(packet.header.flags.contains(HeaderFlags::RESPONSE));
+        assert!(packet.header.is_response());
         assert_eq!(packet.header.qd_count.get(), 1);
         assert_eq!(packet.header.an_count.get(), 1);
         assert_eq!(packet.header.ns_count.get(), 0);
