@@ -561,6 +561,7 @@ dependencies = [
  "log",
  "maplit",
  "pretty_env_logger",
+ "socket2",
 ]
 
 [[package]]
