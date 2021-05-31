@@ -1,6 +1,49 @@
-use std::{fmt, mem::size_of, str};
+use core::{convert::TryInto, fmt, mem::size_of, str};
 
 use bitflags::bitflags;
+
+struct ReadStream<'a> {
+    buffer: &'a [u8],
+    cursor: usize,
+}
+
+impl<'a> ReadStream<'a> {
+    fn new(buffer: &'a [u8]) -> Self {
+        Self { buffer, cursor: 0 }
+    }
+
+    fn read(&mut self, length: usize) -> &[u8] {
+        let result = &self.buffer[self.cursor..self.cursor + length];
+        self.cursor += length;
+
+        result
+    }
+
+    fn read_as<T>(&mut self) -> &T {
+        unsafe { &*(self.read(size_of::<T>()).as_ptr() as *const T) }
+    }
+
+    fn read_u8(&mut self) -> u8 {
+        let result = u8::from_be_bytes(self.buffer[self.cursor..self.cursor + size_of::<u8>()].try_into().unwrap());
+        self.cursor += size_of::<u8>();
+
+        result
+    }
+
+    fn read_u16(&mut self) -> u16 {
+        let result = u16::from_be_bytes(self.buffer[self.cursor..self.cursor + size_of::<u16>()].try_into().unwrap());
+        self.cursor += size_of::<u16>();
+
+        result
+    }
+
+    fn read_u32(&mut self) -> u32 {
+        let result = u32::from_be_bytes(self.buffer[self.cursor..self.cursor + size_of::<u32>()].try_into().unwrap());
+        self.cursor += size_of::<u32>();
+
+        result
+    }
+}
 
 #[derive(Clone)]
 #[repr(C)]
@@ -31,10 +74,6 @@ pub struct U32be {
 impl U32be {
     pub fn new(value: u32) -> Self {
         Self { raw: value.to_be_bytes() }
-    }
-
-    pub fn get(&self) -> u32 {
-        u32::from_be_bytes(self.raw)
     }
 
     pub fn raw(&self) -> &[u8] {
@@ -74,33 +113,33 @@ pub struct Name {
 }
 
 impl Name {
-    pub fn parse(raw: &[u8], original: &[u8]) -> (usize, Self) {
-        let mut cursor = 0;
-
+    fn parse(stream: &mut ReadStream) -> Self {
         let mut labels = Vec::new();
         loop {
-            let length = raw[cursor] as usize;
+            let length = stream.read_u8() as usize;
             if length == 0 {
                 break;
             }
             if length & 192 == 192 {
-                let offset = cast::<U16be>(&raw[cursor..cursor + 2]);
-                let offset = (offset.get() & !49152) as usize;
-                let result = Name::parse(&original[offset..], original);
+                let offset_byte = stream.read_u8() as usize;
+                let offset = (length << 8 | offset_byte) & !49152;
 
-                return (cursor + 2, result.1);
+                let mut new_stream = ReadStream::new(&stream.buffer[offset..]);
+                let mut result = Name::parse(&mut new_stream);
+
+                labels.append(&mut result.labels);
+
+                break;
             } else {
-                let label = &raw[cursor + 1..cursor + 1 + length];
+                let label = stream.read(length as usize);
                 labels.push(str::from_utf8(label).unwrap().into());
             }
-
-            cursor += length + 1;
         }
 
-        (cursor + 1, Self { labels })
+        Self { labels }
     }
 
-    pub fn write(&self, buf: &mut [u8]) -> usize {
+    fn write(&self, buf: &mut [u8]) -> usize {
         let mut cursor = 0;
 
         for label in &self.labels {
@@ -140,8 +179,8 @@ pub enum ResourceType {
 }
 
 impl ResourceType {
-    pub fn parse(raw: &U16be) -> Self {
-        match raw.get() {
+    fn parse(raw: u16) -> Self {
+        match raw {
             1 => Self::A,
             12 => Self::PTR,
             16 => Self::TXT,
@@ -157,8 +196,8 @@ pub enum Class {
 }
 
 impl Class {
-    pub fn parse(raw: &U16be) -> Self {
-        match raw.get() {
+    fn parse(raw: u16) -> Self {
+        match raw & 0x7fff {
             1 => Self::IN,
             unknown => panic!("Unknown class {}", unknown),
         }
@@ -168,30 +207,28 @@ impl Class {
 pub struct Question {
     pub name: Name,
     r#type: ResourceType,
+    unicast: bool,
     class: Class,
 }
 
 impl Question {
-    pub fn parse(raw: &[u8], original: &[u8]) -> (usize, Self) {
-        let mut cursor = 0;
-        let (name_len, name) = Name::parse(raw, original);
-        cursor += name_len;
+    fn parse(mut stream: &mut ReadStream) -> Self {
+        let name = Name::parse(&mut stream);
 
-        let r#type = cast::<U16be>(&raw[cursor..cursor + 2]);
-        let class = cast::<U16be>(&raw[cursor + 2..cursor + 4]);
-        cursor += 4;
+        let r#type = stream.read_u16();
+        let class = stream.read_u16();
 
-        (
-            cursor,
-            Question {
-                name,
-                r#type: ResourceType::parse(r#type),
-                class: Class::parse(class),
-            },
-        )
+        let unicast = class & 0x8000 != 0;
+
+        Question {
+            name,
+            r#type: ResourceType::parse(r#type),
+            unicast,
+            class: Class::parse(class),
+        }
     }
 
-    pub fn write(&self, buf: &mut [u8]) -> usize {
+    fn write(&self, buf: &mut [u8]) -> usize {
         let mut cursor = self.name.write(buf);
 
         buf[cursor..cursor + 2].copy_from_slice(U16be::new(self.r#type as u16).raw());
@@ -213,34 +250,23 @@ pub struct ResourceRecord {
 }
 
 impl ResourceRecord {
-    pub fn parse(raw: &[u8], original: &[u8]) -> (usize, Self) {
-        let mut cursor = 0;
-        let (name_len, name) = Name::parse(raw, original);
-        cursor += name_len;
+    fn parse(mut stream: &mut ReadStream) -> Self {
+        let name = Name::parse(&mut stream);
 
-        let r#type = cast::<U16be>(&raw[cursor..cursor + 2]);
-        let class = cast::<U16be>(&raw[cursor + 2..cursor + 4]);
-        cursor += 4;
+        let r#type = stream.read_u16();
+        let class = stream.read_u16();
+        let ttl = stream.read_u32();
+        let rd_len = stream.read_u16();
 
-        let ttl = cast::<U32be>(&raw[cursor..cursor + 4]);
-        cursor += 4;
+        let data = stream.read(rd_len as usize);
 
-        let rd_len = cast::<U16be>(&raw[cursor..cursor + 2]);
-        cursor += 2;
-
-        let data = Vec::from(&raw[cursor..cursor + rd_len.get() as usize]);
-        cursor += rd_len.get() as usize;
-
-        (
-            cursor,
-            ResourceRecord {
-                name,
-                r#type: ResourceType::parse(r#type),
-                class: Class::parse(class),
-                ttl: ttl.get(),
-                data,
-            },
-        )
+        ResourceRecord {
+            name,
+            r#type: ResourceType::parse(r#type),
+            class: Class::parse(class),
+            ttl,
+            data: data.into(),
+        }
     }
 
     pub fn write(&self, buf: &mut [u8]) -> usize {
@@ -270,7 +296,6 @@ pub struct Packet {
     pub questions: Vec<Question>,
     pub answers: Vec<ResourceRecord>,
     pub nameservers: Vec<ResourceRecord>,
-    pub additional: Vec<ResourceRecord>,
 }
 
 impl Packet {
@@ -289,7 +314,6 @@ impl Packet {
             questions: Vec::new(),
             answers: Vec::new(),
             nameservers: Vec::new(),
-            additional: Vec::new(),
         }
     }
 
@@ -297,36 +321,20 @@ impl Packet {
         if raw.len() < size_of::<Header>() {
             return None;
         }
-        let header = cast::<Header>(&raw);
 
-        let mut cursor = size_of::<Header>();
+        let mut stream = ReadStream::new(raw);
 
-        let mut questions = Vec::new();
-        for _ in 0..header.qd_count.get() {
-            let (len, question) = Question::parse(&raw[cursor..], raw);
-            cursor += len;
+        let header = stream.read_as::<Header>().clone();
 
-            questions.push(question);
-        }
-
-        let mut answers = Vec::new();
-        for _ in 0..header.an_count.get() {
-            let (len, answer) = ResourceRecord::parse(&raw[cursor..], raw);
-            cursor += len;
-
-            answers.push(answer);
-        }
-
-        if cursor != raw.len() {
-            panic!("Some bytes left, raw: {:?}", raw)
-        }
+        let questions = (0..header.qd_count.get()).map(|_| Question::parse(&mut stream)).collect::<Vec<_>>();
+        let answers = (0..header.an_count.get()).map(|_| ResourceRecord::parse(&mut stream)).collect::<Vec<_>>();
+        let nameservers = (0..header.ns_count.get()).map(|_| ResourceRecord::parse(&mut stream)).collect::<Vec<_>>();
 
         Some(Self {
-            header: header.clone(),
+            header,
             questions,
             answers,
-            nameservers: Vec::new(),
-            additional: Vec::new(),
+            nameservers,
         })
     }
 
@@ -348,10 +356,6 @@ impl Packet {
     }
 }
 
-pub fn cast<T>(data: &[u8]) -> &T {
-    unsafe { &*(data.as_ptr() as *const T) }
-}
-
 pub fn cast_bytes<T>(data: &T) -> &[u8] {
     unsafe { std::slice::from_raw_parts((data as *const T) as *const u8, size_of::<T>()) }
 }
@@ -360,7 +364,7 @@ pub fn cast_bytes<T>(data: &T) -> &[u8] {
 mod test {
     use super::*;
 
-    // tests are copied from https://github.com/librespot-org/libmdns/blob/master/src/dns_parser/parser.rs
+    // some tests are copied from https://github.com/librespot-org/libmdns/blob/master/src/dns_parser/parser.rs
     #[test]
     fn parse_simple_query() {
         let query = b"\x06%\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x07example\x03com\x00\x00\x01\x00\x01";
@@ -445,5 +449,18 @@ mod test {
         assert_eq!(packet.answers[0].name.labels[1], "com");
         assert!(packet.answers[0].r#type == ResourceType::A);
         assert!(packet.answers[0].class == Class::IN);
+    }
+
+    #[test]
+    fn parse_mdns_query() {
+        let query = b"\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x00\x0f_companion-link\x04_tcp\x05local\x00\x00\x0c\x80\x01\x08_homekit\xc0\x1c\x00\x0c\x80\x01\x08_airplay\xc0\x1c\x00\x0c\x80\x01\x05_raop\xc0\x1c\x00\x0c\x80\x01\x0c_sleep-proxy\x04_udp\xc0!\x00\x0c\x80\x01";
+        let packet = Packet::parse(query).unwrap();
+
+        assert_eq!(packet.header.id.get(), 0);
+        assert!(packet.header.is_query());
+        assert_eq!(packet.header.qd_count.get(), 5);
+        assert_eq!(packet.header.an_count.get(), 0);
+        assert_eq!(packet.header.ns_count.get(), 0);
+        assert_eq!(packet.header.ar_count.get(), 0);
     }
 }
