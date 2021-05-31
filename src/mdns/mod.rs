@@ -67,11 +67,7 @@ fn handle_packet(data: &[u8], service: &Service) -> Option<Vec<u8>> {
             if question.name.equals(service.r#type) {
                 let response = create_response(packet.header.id(), service);
 
-                let mut buf = vec![0; 2048];
-                let len = response.write(&mut buf);
-                buf.resize(len, 0);
-
-                return Some(buf);
+                return Some(response.write());
             }
         }
     }
@@ -80,7 +76,10 @@ fn handle_packet(data: &[u8], service: &Service) -> Option<Vec<u8>> {
 }
 
 fn create_response(id: u16, service: &Service) -> Packet {
-    // WIP
+    // PTR answer
+    // SRV record
+    // TXT record
+    // A RECORD
 
     Packet::new_response(id)
 }

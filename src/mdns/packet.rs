@@ -45,6 +45,38 @@ impl<'a> ReadStream<'a> {
     }
 }
 
+struct WriteStream {
+    buffer: Vec<u8>,
+}
+
+impl WriteStream {
+    fn new(buffer_capacity: usize) -> Self {
+        Self {
+            buffer: Vec::with_capacity(buffer_capacity),
+        }
+    }
+
+    fn write(&mut self, data: &[u8]) {
+        self.buffer.extend(data);
+    }
+
+    fn write_from<T>(&mut self, data: &T) {
+        self.write(unsafe { std::slice::from_raw_parts((data as *const T) as *const u8, size_of::<T>()) })
+    }
+
+    fn write_u8(&mut self, data: u8) {
+        self.write(&data.to_be_bytes())
+    }
+
+    fn write_u16(&mut self, data: u16) {
+        self.write(&data.to_be_bytes())
+    }
+
+    fn write_u32(&mut self, data: u32) {
+        self.write(&data.to_be_bytes())
+    }
+}
+
 #[derive(Clone)]
 #[repr(C)]
 pub struct U16be {
@@ -58,26 +90,6 @@ impl U16be {
 
     pub fn get(&self) -> u16 {
         u16::from_be_bytes(self.raw)
-    }
-
-    pub fn raw(&self) -> &[u8] {
-        &self.raw
-    }
-}
-
-#[derive(Clone)]
-#[repr(C)]
-pub struct U32be {
-    raw: [u8; 4],
-}
-
-impl U32be {
-    pub fn new(value: u32) -> Self {
-        Self { raw: value.to_be_bytes() }
-    }
-
-    pub fn raw(&self) -> &[u8] {
-        &self.raw
     }
 }
 
@@ -139,21 +151,13 @@ impl Name {
         Self { labels }
     }
 
-    fn write(&self, buf: &mut [u8]) -> usize {
-        let mut cursor = 0;
-
+    fn write(&self, stream: &mut WriteStream) {
         for label in &self.labels {
-            buf[cursor] = label.len() as u8;
-            cursor += 1;
-
-            buf[cursor..cursor + label.len()].copy_from_slice(label.as_bytes());
-            cursor += label.len();
+            stream.write_u8(label.len() as u8);
+            stream.write(label.as_bytes());
         }
 
-        buf[cursor] = 0;
-        cursor += 1;
-
-        cursor
+        stream.write_u8(0);
     }
 
     pub fn equals(&self, other: &str) -> bool {
@@ -228,16 +232,11 @@ impl Question {
         }
     }
 
-    fn write(&self, buf: &mut [u8]) -> usize {
-        let mut cursor = self.name.write(buf);
+    fn write(&self, mut stream: &mut WriteStream) {
+        self.name.write(&mut stream);
 
-        buf[cursor..cursor + 2].copy_from_slice(U16be::new(self.r#type as u16).raw());
-        cursor += 2;
-
-        buf[cursor..cursor + 2].copy_from_slice(U16be::new(self.class as u16).raw());
-        cursor += 2;
-
-        cursor
+        stream.write_u16(self.r#type as u16);
+        stream.write_u16(self.class as u16);
     }
 }
 
@@ -269,25 +268,15 @@ impl ResourceRecord {
         }
     }
 
-    pub fn write(&self, buf: &mut [u8]) -> usize {
-        let mut cursor = self.name.write(buf);
+    fn write(&self, mut stream: &mut WriteStream) {
+        self.name.write(&mut stream);
 
-        buf[cursor..cursor + 2].copy_from_slice(U16be::new(self.r#type as u16).raw());
-        cursor += 2;
+        stream.write_u16(self.r#type as u16);
+        stream.write_u16(self.class as u16);
+        stream.write_u32(self.ttl as u32);
 
-        buf[cursor..cursor + 2].copy_from_slice(U16be::new(self.class as u16).raw());
-        cursor += 2;
-
-        buf[cursor..cursor + 4].copy_from_slice(U32be::new(self.ttl).raw());
-        cursor += 4;
-
-        buf[cursor..cursor + 2].copy_from_slice(U16be::new(self.data.len() as u16).raw());
-        cursor += 2;
-
-        buf[cursor..cursor + self.data.len()].copy_from_slice(&self.data);
-        cursor += self.data.len();
-
-        cursor
+        stream.write_u16(self.data.len() as u16);
+        stream.write(&self.data);
     }
 }
 
@@ -338,26 +327,16 @@ impl Packet {
         })
     }
 
-    pub fn write(&self, buf: &mut [u8]) -> usize {
-        let mut cursor = 0;
+    pub fn write(&self) -> Vec<u8> {
+        let mut stream = WriteStream::new(2048);
 
-        buf[0..size_of::<Header>()].copy_from_slice(cast_bytes(&self.header));
-        cursor += size_of::<Header>();
+        stream.write_from(&self.header);
 
-        for question in &self.questions {
-            cursor += question.write(&mut buf[cursor..]);
-        }
+        self.questions.iter().for_each(|x| x.write(&mut stream));
+        self.answers.iter().for_each(|x| x.write(&mut stream));
 
-        for answer in &self.answers {
-            cursor += answer.write(&mut buf[cursor..]);
-        }
-
-        cursor
+        stream.buffer
     }
-}
-
-pub fn cast_bytes<T>(data: &T) -> &[u8] {
-    unsafe { std::slice::from_raw_parts((data as *const T) as *const u8, size_of::<T>()) }
 }
 
 #[cfg(test)]
@@ -384,11 +363,10 @@ mod test {
         assert!(packet.questions[0].r#type == ResourceType::A);
         assert!(packet.questions[0].class == Class::IN);
 
-        let mut buf = vec![0; 512];
-        let len = packet.write(&mut buf);
+        let new_packet = packet.write();
 
-        assert_eq!(len, query.len());
-        assert_eq!(&buf[..len], query);
+        assert_eq!(new_packet.len(), query.len());
+        assert_eq!(&new_packet, query);
     }
 
     #[test]
@@ -417,11 +395,10 @@ mod test {
         assert!(packet.answers[0].r#type == ResourceType::A);
         assert!(packet.answers[0].class == Class::IN);
 
-        let mut buf = vec![0; 512];
-        let len = packet.write(&mut buf);
+        let new_packet = packet.write();
 
-        assert_eq!(len, response.len());
-        assert_eq!(&buf[..len], response);
+        assert_eq!(new_packet.len(), response.len());
+        assert_eq!(&new_packet, response);
     }
 
     #[test]
