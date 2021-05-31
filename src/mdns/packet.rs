@@ -211,7 +211,6 @@ impl Class {
 pub struct Question {
     pub name: Name,
     r#type: ResourceType,
-    unicast: bool,
     class: Class,
 }
 
@@ -222,12 +221,12 @@ impl Question {
         let r#type = stream.read_u16();
         let class = stream.read_u16();
 
-        let unicast = class & 0x8000 != 0;
+        // TODO
+        let _unicast = class & 0x8000 != 0;
 
         Question {
             name,
             r#type: ResourceType::parse(r#type),
-            unicast,
             class: Class::parse(class),
         }
     }
