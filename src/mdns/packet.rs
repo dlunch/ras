@@ -1,4 +1,4 @@
-use core::{convert::TryInto, fmt, mem::size_of, str};
+use std::{convert::TryInto, fmt, mem::size_of, net::Ipv4Addr, str};
 
 use bitflags::bitflags;
 
@@ -10,6 +10,10 @@ struct ReadStream<'a> {
 impl<'a> ReadStream<'a> {
     fn new(buffer: &'a [u8]) -> Self {
         Self { buffer, cursor: 0 }
+    }
+
+    fn is_end(&self) -> bool {
+        self.cursor == self.buffer.len()
     }
 
     fn read(&mut self, length: usize) -> &[u8] {
@@ -239,12 +243,88 @@ impl Question {
     }
 }
 
+#[allow(clippy::upper_case_acronyms)]
+pub enum ResourceRecordData {
+    A(Ipv4Addr),
+    PTR(Name),
+    TXT(Vec<String>),
+    SRV { priority: u16, weight: u16, port: u16, target: Name },
+}
+
+impl ResourceRecordData {
+    fn parse(r#type: ResourceType, data: &[u8]) -> Self {
+        let mut stream = ReadStream::new(data);
+        match r#type {
+            ResourceType::A => ResourceRecordData::A(Ipv4Addr::from(stream.read_u32())),
+            ResourceType::PTR => ResourceRecordData::PTR(Name::parse(&mut stream)),
+            ResourceType::TXT => {
+                let mut txt = Vec::new();
+                loop {
+                    let length = stream.read_u8() as usize;
+                    txt.push(str::from_utf8(stream.read(length)).unwrap().into());
+
+                    if stream.is_end() {
+                        break;
+                    }
+                }
+
+                ResourceRecordData::TXT(txt)
+            }
+            ResourceType::SRV => ResourceRecordData::SRV {
+                priority: stream.read_u16(),
+                weight: stream.read_u16(),
+                port: stream.read_u16(),
+                target: Name::parse(&mut stream),
+            },
+            _ => panic!(),
+        }
+    }
+
+    fn r#type(&self) -> ResourceType {
+        match self {
+            ResourceRecordData::A(_) => ResourceType::A,
+            ResourceRecordData::PTR(_) => ResourceType::PTR,
+            ResourceRecordData::TXT(_) => ResourceType::TXT,
+            ResourceRecordData::SRV { .. } => ResourceType::SRV,
+        }
+    }
+
+    fn write(&self, mut stream: &mut WriteStream) {
+        let mut new_stream = WriteStream::new(64);
+        match self {
+            ResourceRecordData::A(x) => {
+                new_stream.write_u32((*x).into());
+            }
+            ResourceRecordData::PTR(x) => x.write(&mut stream),
+            ResourceRecordData::TXT(x) => {
+                for item in x {
+                    new_stream.write_u16(item.len() as u16);
+                    new_stream.write(item.as_bytes());
+                }
+            }
+            ResourceRecordData::SRV {
+                priority,
+                weight,
+                port,
+                target,
+            } => {
+                new_stream.write_u16(*priority);
+                new_stream.write_u16(*weight);
+                new_stream.write_u16(*port);
+                target.write(&mut stream);
+            }
+        }
+
+        stream.write_u16(new_stream.buffer.len() as u16);
+        stream.write(&new_stream.buffer);
+    }
+}
+
 pub struct ResourceRecord {
     name: Name,
-    r#type: ResourceType,
     class: Class,
     ttl: u32,
-    data: Vec<u8>,
+    data: ResourceRecordData,
 }
 
 impl ResourceRecord {
@@ -260,22 +340,20 @@ impl ResourceRecord {
 
         ResourceRecord {
             name,
-            r#type: ResourceType::parse(r#type),
             class: Class::parse(class),
             ttl,
-            data: data.into(),
+            data: ResourceRecordData::parse(ResourceType::parse(r#type), data),
         }
     }
 
     fn write(&self, mut stream: &mut WriteStream) {
         self.name.write(&mut stream);
 
-        stream.write_u16(self.r#type as u16);
+        stream.write_u16(self.data.r#type() as u16);
         stream.write_u16(self.class as u16);
         stream.write_u32(self.ttl as u32);
 
-        stream.write_u16(self.data.len() as u16);
-        stream.write(&self.data);
+        self.data.write(&mut stream);
     }
 }
 
@@ -391,7 +469,7 @@ mod test {
         assert_eq!(packet.answers[0].name.labels.len(), 2);
         assert_eq!(packet.answers[0].name.labels[0], "example");
         assert_eq!(packet.answers[0].name.labels[1], "com");
-        assert!(packet.answers[0].r#type == ResourceType::A);
+        assert!(matches!(packet.answers[0].data, ResourceRecordData::A(_)));
         assert!(packet.answers[0].class == Class::IN);
 
         let new_packet = packet.write();
@@ -423,7 +501,7 @@ mod test {
         assert_eq!(packet.answers[0].name.labels.len(), 2);
         assert_eq!(packet.answers[0].name.labels[0], "example");
         assert_eq!(packet.answers[0].name.labels[1], "com");
-        assert!(packet.answers[0].r#type == ResourceType::A);
+        assert!(matches!(packet.answers[0].data, ResourceRecordData::A(_)));
         assert!(packet.answers[0].class == Class::IN);
     }
 
