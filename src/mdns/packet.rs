@@ -150,6 +150,12 @@ pub struct Name {
 }
 
 impl Name {
+    pub fn new(name: &str) -> Self {
+        Self {
+            labels: name.split('.').map(|x| x.into()).collect(),
+        }
+    }
+
     fn parse(stream: &mut ReadStream) -> Self {
         let mut labels = Vec::new();
         loop {
@@ -375,6 +381,15 @@ pub struct ResourceRecord {
 }
 
 impl ResourceRecord {
+    pub fn new(name: &str, ttl: u32, data: ResourceRecordData) -> Self {
+        Self {
+            name: Name::new(name),
+            class: Class::IN,
+            ttl,
+            data,
+        }
+    }
+
     fn parse(mut stream: &mut ReadStream) -> Self {
         let name = Name::parse(&mut stream);
 
@@ -407,22 +422,28 @@ pub struct Packet {
 }
 
 impl Packet {
-    pub fn new_response(id: u16) -> Self {
+    pub fn new_response(
+        id: u16,
+        questions: Vec<Question>,
+        answers: Vec<ResourceRecord>,
+        nameservers: Vec<ResourceRecord>,
+        additionals: Vec<ResourceRecord>,
+    ) -> Self {
         let header = Header {
             id: U16be::new(id),
             flags: HeaderFlags::RESPONSE,
-            qd_count: U16be::new(0),
-            an_count: U16be::new(0),
-            ns_count: U16be::new(0),
-            ar_count: U16be::new(0),
+            qd_count: U16be::new(questions.len() as u16),
+            an_count: U16be::new(answers.len() as u16),
+            ns_count: U16be::new(nameservers.len() as u16),
+            ar_count: U16be::new(additionals.len() as u16),
         };
 
         Self {
             header,
-            questions: Vec::new(),
-            answers: Vec::new(),
-            nameservers: Vec::new(),
-            additionals: Vec::new(),
+            questions,
+            answers,
+            nameservers,
+            additionals,
         }
     }
 

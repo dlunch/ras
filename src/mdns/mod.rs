@@ -11,7 +11,7 @@ use async_std::task::spawn_blocking;
 use log::debug;
 use multicast_socket::{all_ipv4_interfaces, MulticastOptions, MulticastSocket};
 
-use packet::Packet;
+use packet::{Name, Packet, ResourceRecord, ResourceRecordData};
 
 pub struct Service {
     pub r#type: &'static str,
@@ -76,10 +76,33 @@ fn handle_packet(data: &[u8], service: &Service) -> Option<Vec<u8>> {
 }
 
 fn create_response(id: u16, service: &Service) -> Packet {
-    // PTR answer
-    // SRV record
-    // TXT record
-    // A RECORD
+    let hostname = "hostname.local";
+    let ip = Ipv4Addr::new(192, 168, 1, 1);
 
-    Packet::new_response(id)
+    // PTR answer
+    let answer = ResourceRecord::new(service.r#type, 3600, ResourceRecordData::PTR(Name::new(service.name)));
+
+    // SRV record
+    let srv = ResourceRecord::new(
+        service.name,
+        3600,
+        ResourceRecordData::SRV {
+            priority: 0,
+            weight: 0,
+            port: service.port,
+            target: Name::new(hostname),
+        },
+    );
+
+    // TXT record
+    let txt = ResourceRecord::new(
+        service.name,
+        3600,
+        ResourceRecordData::TXT(service.txt.iter().map(|x| (*x).into()).collect()),
+    );
+
+    // A RECORD
+    let a = ResourceRecord::new(hostname, 3600, ResourceRecordData::A(ip));
+
+    Packet::new_response(id, Vec::new(), vec![answer], Vec::new(), vec![srv, txt, a])
 }
