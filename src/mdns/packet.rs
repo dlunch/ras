@@ -184,6 +184,7 @@ pub enum ResourceType {
     PTR = 12,
     TXT = 16,
     SRV = 33,
+    OPT = 41,
 }
 
 impl ResourceType {
@@ -193,6 +194,7 @@ impl ResourceType {
             12 => Self::PTR,
             16 => Self::TXT,
             33 => Self::SRV,
+            41 => Self::OPT,
             unknown => panic!("Unknown resourcetype {}", unknown),
         }
     }
@@ -200,14 +202,22 @@ impl ResourceType {
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub enum Class {
-    IN = 1,
+    IN,
+    Unknown(u16),
 }
 
 impl Class {
     fn parse(raw: u16) -> Self {
         match raw & 0x7fff {
             1 => Self::IN,
-            unknown => panic!("Unknown class {}", unknown),
+            x => Self::Unknown(x),
+        }
+    }
+
+    fn write(&self, stream: &mut WriteStream) {
+        match self {
+            Self::IN => stream.write_u16(1),
+            Self::Unknown(x) => panic!("Cannot write unknown class {}", x),
         }
     }
 }
@@ -239,7 +249,7 @@ impl Question {
         self.name.write(&mut stream);
 
         stream.write_u16(self.r#type as u16);
-        stream.write_u16(self.class as u16);
+        self.class.write(&mut stream);
     }
 }
 
@@ -249,14 +259,15 @@ pub enum ResourceRecordData {
     PTR(Name),
     TXT(Vec<String>),
     SRV { priority: u16, weight: u16, port: u16, target: Name },
+    Unknown { r#type: ResourceType, data: Vec<u8> },
 }
 
 impl ResourceRecordData {
     fn parse(r#type: ResourceType, data: &[u8]) -> Self {
         let mut stream = ReadStream::new(data);
         match r#type {
-            ResourceType::A => ResourceRecordData::A(Ipv4Addr::from(stream.read_u32())),
-            ResourceType::PTR => ResourceRecordData::PTR(Name::parse(&mut stream)),
+            ResourceType::A => Self::A(Ipv4Addr::from(stream.read_u32())),
+            ResourceType::PTR => Self::PTR(Name::parse(&mut stream)),
             ResourceType::TXT => {
                 let mut txt = Vec::new();
                 loop {
@@ -268,41 +279,45 @@ impl ResourceRecordData {
                     }
                 }
 
-                ResourceRecordData::TXT(txt)
+                Self::TXT(txt)
             }
-            ResourceType::SRV => ResourceRecordData::SRV {
+            ResourceType::SRV => Self::SRV {
                 priority: stream.read_u16(),
                 weight: stream.read_u16(),
                 port: stream.read_u16(),
                 target: Name::parse(&mut stream),
             },
-            _ => panic!(),
+            x => Self::Unknown {
+                r#type: x,
+                data: data.into(),
+            },
         }
     }
 
     fn r#type(&self) -> ResourceType {
         match self {
-            ResourceRecordData::A(_) => ResourceType::A,
-            ResourceRecordData::PTR(_) => ResourceType::PTR,
-            ResourceRecordData::TXT(_) => ResourceType::TXT,
-            ResourceRecordData::SRV { .. } => ResourceType::SRV,
+            Self::A(_) => ResourceType::A,
+            Self::PTR(_) => ResourceType::PTR,
+            Self::TXT(_) => ResourceType::TXT,
+            Self::SRV { .. } => ResourceType::SRV,
+            Self::Unknown { r#type, .. } => *r#type,
         }
     }
 
     fn write(&self, mut stream: &mut WriteStream) {
         let mut new_stream = WriteStream::new(64);
         match self {
-            ResourceRecordData::A(x) => {
+            Self::A(x) => {
                 new_stream.write_u32((*x).into());
             }
-            ResourceRecordData::PTR(x) => x.write(&mut stream),
-            ResourceRecordData::TXT(x) => {
+            Self::PTR(x) => x.write(&mut stream),
+            Self::TXT(x) => {
                 for item in x {
                     new_stream.write_u16(item.len() as u16);
                     new_stream.write(item.as_bytes());
                 }
             }
-            ResourceRecordData::SRV {
+            Self::SRV {
                 priority,
                 weight,
                 port,
@@ -313,6 +328,7 @@ impl ResourceRecordData {
                 new_stream.write_u16(*port);
                 target.write(&mut stream);
             }
+            Self::Unknown { data, .. } => new_stream.write(data),
         }
 
         stream.write_u16(new_stream.buffer.len() as u16);
@@ -350,7 +366,7 @@ impl ResourceRecord {
         self.name.write(&mut stream);
 
         stream.write_u16(self.data.r#type() as u16);
-        stream.write_u16(self.class as u16);
+        self.class.write(&mut stream);
         stream.write_u32(self.ttl as u32);
 
         self.data.write(&mut stream);
@@ -362,6 +378,7 @@ pub struct Packet {
     pub questions: Vec<Question>,
     pub answers: Vec<ResourceRecord>,
     pub nameservers: Vec<ResourceRecord>,
+    pub additionals: Vec<ResourceRecord>,
 }
 
 impl Packet {
@@ -380,6 +397,7 @@ impl Packet {
             questions: Vec::new(),
             answers: Vec::new(),
             nameservers: Vec::new(),
+            additionals: Vec::new(),
         }
     }
 
@@ -395,12 +413,14 @@ impl Packet {
         let questions = (0..header.qd_count.get()).map(|_| Question::parse(&mut stream)).collect::<Vec<_>>();
         let answers = (0..header.an_count.get()).map(|_| ResourceRecord::parse(&mut stream)).collect::<Vec<_>>();
         let nameservers = (0..header.ns_count.get()).map(|_| ResourceRecord::parse(&mut stream)).collect::<Vec<_>>();
+        let additionals = (0..header.ar_count.get()).map(|_| ResourceRecord::parse(&mut stream)).collect::<Vec<_>>();
 
         Some(Self {
             header,
             questions,
             answers,
             nameservers,
+            additionals,
         })
     }
 
