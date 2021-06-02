@@ -195,7 +195,7 @@ impl ResourceType {
             16 => Self::TXT,
             33 => Self::SRV,
             41 => Self::OPT,
-            unknown => panic!("Unknown resourcetype {}", unknown),
+            x => panic!("Unknown resourcetype {}", x),
         }
     }
 }
