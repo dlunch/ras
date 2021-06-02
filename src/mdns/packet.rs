@@ -1,4 +1,10 @@
-use std::{convert::TryInto, fmt, mem::size_of, net::Ipv4Addr, str};
+use std::{
+    convert::TryInto,
+    fmt,
+    mem::size_of,
+    net::{Ipv4Addr, Ipv6Addr},
+    str,
+};
 
 use bitflags::bitflags;
 
@@ -10,6 +16,10 @@ struct ReadStream<'a> {
 impl<'a> ReadStream<'a> {
     fn new(buffer: &'a [u8]) -> Self {
         Self { buffer, cursor: 0 }
+    }
+
+    fn with_cursor(buffer: &'a [u8], cursor: usize) -> Self {
+        Self { buffer, cursor }
     }
 
     fn is_end(&self) -> bool {
@@ -47,6 +57,13 @@ impl<'a> ReadStream<'a> {
 
         result
     }
+
+    fn read_u128(&mut self) -> u128 {
+        let result = u128::from_be_bytes(self.buffer[self.cursor..self.cursor + size_of::<u128>()].try_into().unwrap());
+        self.cursor += size_of::<u128>();
+
+        result
+    }
 }
 
 struct WriteStream {
@@ -77,6 +94,10 @@ impl WriteStream {
     }
 
     fn write_u32(&mut self, data: u32) {
+        self.write(&data.to_be_bytes())
+    }
+
+    fn write_u128(&mut self, data: u128) {
         self.write(&data.to_be_bytes())
     }
 }
@@ -140,7 +161,7 @@ impl Name {
                 let offset_byte = stream.read_u8() as usize;
                 let offset = (length << 8 | offset_byte) & !49152;
 
-                let mut new_stream = ReadStream::new(&stream.buffer[offset..]);
+                let mut new_stream = ReadStream::with_cursor(stream.buffer, offset);
                 let mut result = Name::parse(&mut new_stream);
 
                 labels.append(&mut result.labels);
@@ -183,6 +204,7 @@ pub enum ResourceType {
     A = 1,
     PTR = 12,
     TXT = 16,
+    AAAA = 28,
     SRV = 33,
     OPT = 41,
 }
@@ -193,6 +215,7 @@ impl ResourceType {
             1 => Self::A,
             12 => Self::PTR,
             16 => Self::TXT,
+            28 => Self::AAAA,
             33 => Self::SRV,
             41 => Self::OPT,
             x => panic!("Unknown resourcetype {}", x),
@@ -256,6 +279,7 @@ impl Question {
 #[allow(clippy::upper_case_acronyms)]
 pub enum ResourceRecordData {
     A(Ipv4Addr),
+    AAAA(Ipv6Addr),
     PTR(Name),
     TXT(Vec<String>),
     SRV { priority: u16, weight: u16, port: u16, target: Name },
@@ -263,18 +287,21 @@ pub enum ResourceRecordData {
 }
 
 impl ResourceRecordData {
-    fn parse(r#type: ResourceType, data: &[u8]) -> Self {
-        let mut stream = ReadStream::new(data);
+    fn parse(r#type: ResourceType, mut stream: &mut ReadStream) -> Self {
+        let length = stream.read_u16() as usize;
+
         match r#type {
             ResourceType::A => Self::A(Ipv4Addr::from(stream.read_u32())),
+            ResourceType::AAAA => Self::AAAA(Ipv6Addr::from(stream.read_u128())),
             ResourceType::PTR => Self::PTR(Name::parse(&mut stream)),
             ResourceType::TXT => {
                 let mut txt = Vec::new();
+                let mut new_stream = ReadStream::new(&stream.buffer[stream.cursor..stream.cursor + length]);
                 loop {
-                    let length = stream.read_u8() as usize;
-                    txt.push(str::from_utf8(stream.read(length)).unwrap().into());
+                    let length = new_stream.read_u8() as usize;
+                    txt.push(str::from_utf8(new_stream.read(length)).unwrap().into());
 
-                    if stream.is_end() {
+                    if new_stream.is_end() {
                         break;
                     }
                 }
@@ -289,7 +316,7 @@ impl ResourceRecordData {
             },
             x => Self::Unknown {
                 r#type: x,
-                data: data.into(),
+                data: stream.read(length).into(),
             },
         }
     }
@@ -297,6 +324,7 @@ impl ResourceRecordData {
     fn r#type(&self) -> ResourceType {
         match self {
             Self::A(_) => ResourceType::A,
+            Self::AAAA(_) => ResourceType::AAAA,
             Self::PTR(_) => ResourceType::PTR,
             Self::TXT(_) => ResourceType::TXT,
             Self::SRV { .. } => ResourceType::SRV,
@@ -309,6 +337,9 @@ impl ResourceRecordData {
         match self {
             Self::A(x) => {
                 new_stream.write_u32((*x).into());
+            }
+            Self::AAAA(x) => {
+                new_stream.write_u128((*x).into());
             }
             Self::PTR(x) => x.write(&mut stream),
             Self::TXT(x) => {
@@ -347,19 +378,13 @@ impl ResourceRecord {
     fn parse(mut stream: &mut ReadStream) -> Self {
         let name = Name::parse(&mut stream);
 
-        let r#type = stream.read_u16();
-        let class = stream.read_u16();
+        let r#type = ResourceType::parse(stream.read_u16());
+        let class = Class::parse(stream.read_u16());
         let ttl = stream.read_u32();
-        let rd_len = stream.read_u16();
 
-        let data = stream.read(rd_len as usize);
+        let data = ResourceRecordData::parse(r#type, &mut stream);
 
-        ResourceRecord {
-            name,
-            class: Class::parse(class),
-            ttl,
-            data: ResourceRecordData::parse(ResourceType::parse(r#type), data),
-        }
+        ResourceRecord { name, class, ttl, data }
     }
 
     fn write(&self, mut stream: &mut WriteStream) {
