@@ -17,7 +17,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let mdns_join_handle = spawn(async {
         let service = mdns::Service {
-            r#type: "_raop._tcp",
+            r#type: "_raop._tcp.local",
             name: "tcp",
             port: 7000,
             txt: vec![
