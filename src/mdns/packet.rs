@@ -22,10 +22,6 @@ impl<'a> ReadStream<'a> {
         Self { buffer, cursor }
     }
 
-    fn is_end(&self) -> bool {
-        self.cursor == self.buffer.len()
-    }
-
     fn read(&mut self, length: usize) -> &[u8] {
         let result = &self.buffer[self.cursor..self.cursor + length];
         self.cursor += length;
@@ -184,8 +180,9 @@ impl Name {
 
     fn write(&self, stream: &mut WriteStream) {
         for label in &self.labels {
-            stream.write_u8(label.len() as u8);
-            stream.write(label.as_bytes());
+            let bytes = label.as_bytes();
+            stream.write_u8(bytes.len() as u8);
+            stream.write(bytes);
         }
 
         stream.write_u8(0);
@@ -302,12 +299,12 @@ impl ResourceRecordData {
             ResourceType::PTR => Self::PTR(Name::parse(&mut stream)),
             ResourceType::TXT => {
                 let mut txt = Vec::new();
-                let mut new_stream = ReadStream::new(&stream.buffer[stream.cursor..stream.cursor + length]);
+                let end = stream.cursor + length;
                 loop {
-                    let length = new_stream.read_u8() as usize;
-                    txt.push(str::from_utf8(new_stream.read(length)).unwrap().into());
+                    let length = stream.read_u8() as usize;
+                    txt.push(str::from_utf8(stream.read(length)).unwrap().into());
 
-                    if new_stream.is_end() {
+                    if stream.cursor == end {
                         break;
                     }
                 }
@@ -338,7 +335,7 @@ impl ResourceRecordData {
         }
     }
 
-    fn write(&self, mut stream: &mut WriteStream) {
+    fn write(&self, stream: &mut WriteStream) {
         let mut new_stream = WriteStream::new(64);
         match self {
             Self::A(x) => {
@@ -347,11 +344,13 @@ impl ResourceRecordData {
             Self::AAAA(x) => {
                 new_stream.write_u128((*x).into());
             }
-            Self::PTR(x) => x.write(&mut stream),
+            Self::PTR(x) => x.write(&mut new_stream),
             Self::TXT(x) => {
                 for item in x {
-                    new_stream.write_u16(item.len() as u16);
-                    new_stream.write(item.as_bytes());
+                    let bytes = item.as_bytes();
+
+                    new_stream.write_u16(bytes.len() as u16);
+                    new_stream.write(bytes);
                 }
             }
             Self::SRV {
@@ -363,7 +362,7 @@ impl ResourceRecordData {
                 new_stream.write_u16(*priority);
                 new_stream.write_u16(*weight);
                 new_stream.write_u16(*port);
-                target.write(&mut stream);
+                target.write(&mut new_stream);
             }
             Self::Unknown { data, .. } => new_stream.write(data),
         }
@@ -584,5 +583,42 @@ mod test {
         assert_eq!(packet.header.an_count.get(), 0);
         assert_eq!(packet.header.ns_count.get(), 0);
         assert_eq!(packet.header.ar_count.get(), 0);
+    }
+
+    #[test]
+    fn write_and_parse() {
+        let hostname = "hostname.local";
+        let ip = Ipv4Addr::new(192, 168, 1, 1);
+
+        // PTR answer
+        let answer = ResourceRecord::new("_raop._tcp.local", 3600, ResourceRecordData::PTR(Name::new("test")));
+
+        // SRV record
+        let srv = ResourceRecord::new(
+            "test",
+            3600,
+            ResourceRecordData::SRV {
+                priority: 0,
+                weight: 0,
+                port: 1234,
+                target: Name::new(hostname),
+            },
+        );
+
+        // TXT record
+        let txt = ResourceRecord::new("test", 3600, ResourceRecordData::TXT(vec!["test".into(), "test1".into()]));
+
+        // A RECORD
+        let a = ResourceRecord::new(hostname, 3600, ResourceRecordData::A(ip));
+
+        let packet = Packet::new_response(1234, Vec::new(), vec![answer], Vec::new(), vec![srv, txt, a]);
+
+        let packet2 = Packet::parse(&packet.write()).unwrap();
+
+        assert_eq!(packet.header.id.get(), packet2.header.id.get());
+        assert_eq!(packet.header.qd_count.get(), packet2.header.qd_count.get());
+        assert_eq!(packet.header.an_count.get(), packet2.header.an_count.get());
+        assert_eq!(packet.header.ns_count.get(), packet2.header.ns_count.get());
+        assert_eq!(packet.header.ar_count.get(), packet2.header.ar_count.get());
     }
 }
