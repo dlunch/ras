@@ -349,7 +349,7 @@ impl ResourceRecordData {
                 for item in x {
                     let bytes = item.as_bytes();
 
-                    new_stream.write_u16(bytes.len() as u16);
+                    new_stream.write_u8(bytes.len() as u8);
                     new_stream.write(bytes);
                 }
             }
