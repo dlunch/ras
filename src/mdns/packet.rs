@@ -477,6 +477,8 @@ impl Packet {
 
         self.questions.iter().for_each(|x| x.write(&mut stream));
         self.answers.iter().for_each(|x| x.write(&mut stream));
+        self.nameservers.iter().for_each(|x| x.write(&mut stream));
+        self.additionals.iter().for_each(|x| x.write(&mut stream));
 
         stream.buffer
     }
