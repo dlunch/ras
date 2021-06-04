@@ -22,6 +22,8 @@ pub struct Service {
 
 pub async fn serve(service: &Service) -> io::Result<()> {
     let mdns_addr = Ipv4Addr::new(224, 0, 0, 251);
+    let hostname = hostname::get()?.into_string().unwrap();
+    debug!("hostname: {}", hostname);
 
     let interfaces = all_ipv4_interfaces()?;
     let socket = Arc::new(MulticastSocket::with_options(
@@ -49,7 +51,7 @@ pub async fn serve(service: &Service) -> io::Result<()> {
         .await?;
         debug!("receive from {}, raw {:?}", message.origin_address, message.data);
 
-        let response = handle_packet(&message.data, &service);
+        let response = handle_packet(&message.data, &service, &hostname);
 
         if let Some(response) = response {
             debug!("sending response to {:?}, raw {:?}", message.origin_address, response);
@@ -58,14 +60,14 @@ pub async fn serve(service: &Service) -> io::Result<()> {
     }
 }
 
-fn handle_packet(data: &[u8], service: &Service) -> Option<Vec<u8>> {
+fn handle_packet(data: &[u8], service: &Service, hostname: &str) -> Option<Vec<u8>> {
     let packet = Packet::parse(&data)?;
     if packet.header.is_query() {
         for question in &packet.questions {
             debug!("question {}", question.name);
 
             if question.name.equals(service.r#type) {
-                let response = create_response(packet.header.id(), service);
+                let response = create_response(packet.header.id(), service, hostname);
 
                 return Some(response.write());
             }
@@ -75,8 +77,7 @@ fn handle_packet(data: &[u8], service: &Service) -> Option<Vec<u8>> {
     None
 }
 
-fn create_response(id: u16, service: &Service) -> Packet {
-    let hostname = "hostname.local";
+fn create_response(id: u16, service: &Service, hostname: &str) -> Packet {
     let ip = Ipv4Addr::new(192, 168, 1, 1);
 
     // PTR answer
