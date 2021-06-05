@@ -95,10 +95,14 @@ impl MdnsServer {
         let ip = Ipv4Addr::new(192, 168, 1, 1);
 
         // PTR answer
-        let answer = ResourceRecord::new(service.r#type, 3600, ResourceRecordData::PTR(Name::new(service.name)));
+        let answers = vec![ResourceRecord::new(
+            service.r#type,
+            3600,
+            ResourceRecordData::PTR(Name::new(service.name)),
+        )];
 
         // SRV record
-        let srv = ResourceRecord::new(
+        let mut additionals = vec![ResourceRecord::new(
             service.name,
             3600,
             ResourceRecordData::SRV {
@@ -107,18 +111,20 @@ impl MdnsServer {
                 port: service.port,
                 target: Name::new(&self.hostname),
             },
-        );
+        )];
 
         // TXT record
-        let txt = ResourceRecord::new(
-            service.name,
-            3600,
-            ResourceRecordData::TXT(service.txt.iter().map(|x| (*x).into()).collect()),
-        );
+        if !service.txt.is_empty() {
+            additionals.push(ResourceRecord::new(
+                service.name,
+                3600,
+                ResourceRecordData::TXT(service.txt.iter().map(|x| (*x).into()).collect()),
+            ));
+        }
 
-        // A RECORD
-        let a = ResourceRecord::new(&self.hostname, 3600, ResourceRecordData::A(ip));
+        // A record
+        additionals.push(ResourceRecord::new(&self.hostname, 3600, ResourceRecordData::A(ip)));
 
-        (vec![answer], vec![srv, txt, a])
+        (answers, additionals)
     }
 }
