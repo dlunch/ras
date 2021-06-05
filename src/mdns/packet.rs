@@ -250,8 +250,9 @@ impl Class {
 
 pub struct Question {
     pub name: Name,
-    r#type: ResourceType,
+    pub r#type: ResourceType,
     class: Class,
+    pub unicast: bool,
 }
 
 impl Question {
@@ -261,13 +262,13 @@ impl Question {
         let r#type = stream.read_u16();
         let class = stream.read_u16();
 
-        // TODO
-        let _unicast = class & 0x8000 != 0;
+        let unicast = class & 0x8000 != 0;
 
         Question {
             name,
             r#type: ResourceType::parse(r#type),
             class: Class::parse(class),
+            unicast,
         }
     }
 
