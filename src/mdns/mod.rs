@@ -20,91 +20,105 @@ pub struct Service {
     pub txt: Vec<&'static str>,
 }
 
-pub async fn serve(service: &Service) -> io::Result<()> {
-    let mdns_addr = Ipv4Addr::new(224, 0, 0, 251);
-    let hostname = hostname::get()?.into_string().unwrap();
-    debug!("hostname: {}", hostname);
+pub struct MdnsServer {
+    services: Vec<Service>,
+    hostname: String,
+}
 
-    let interfaces = all_ipv4_interfaces()?;
-    let socket = Arc::new(MulticastSocket::with_options(
-        SocketAddrV4::new(mdns_addr, 5353),
-        interfaces,
-        MulticastOptions {
-            read_timeout: Duration::from_secs(60), // MulticastSocket doesn't let us to use infinite timeout here
-            loopback: false,
-            buffer_size: 2048,
-            bind_address: Ipv4Addr::UNSPECIFIED,
-        },
-    )?);
+impl MdnsServer {
+    pub fn new(services: Vec<Service>) -> io::Result<Self> {
+        let hostname = hostname::get()?.into_string().unwrap();
+        debug!("hostname: {}", hostname);
 
-    loop {
-        let socket2 = socket.clone();
-        let message = spawn_blocking(move || loop {
-            let result = socket2.receive();
-            if let Err(x) = &result {
-                if x.kind() == io::ErrorKind::TimedOut {
-                    continue;
+        Ok(Self { services, hostname })
+    }
+
+    pub async fn serve(&self) -> io::Result<()> {
+        let mdns_addr = Ipv4Addr::new(224, 0, 0, 251);
+
+        let interfaces = all_ipv4_interfaces()?;
+        let socket = Arc::new(MulticastSocket::with_options(
+            SocketAddrV4::new(mdns_addr, 5353),
+            interfaces,
+            MulticastOptions {
+                read_timeout: Duration::from_secs(60), // MulticastSocket doesn't let us to use infinite timeout here
+                loopback: false,
+                buffer_size: 2048,
+                bind_address: Ipv4Addr::UNSPECIFIED,
+            },
+        )?);
+
+        loop {
+            let socket2 = socket.clone();
+            let message = spawn_blocking(move || loop {
+                let result = socket2.receive();
+                if let Err(x) = &result {
+                    if x.kind() == io::ErrorKind::TimedOut {
+                        continue;
+                    }
+                }
+                return result;
+            })
+            .await?;
+            debug!("receive from {}, raw {:?}", message.origin_address, message.data);
+
+            let response = self.handle_packet(&message.data);
+
+            if let Some(response) = response {
+                debug!("sending response to {:?}, raw {:?}", message.origin_address, response);
+                socket.send(&response, &message.interface)?;
+            }
+        }
+    }
+
+    fn handle_packet(&self, data: &[u8]) -> Option<Vec<u8>> {
+        let packet = Packet::parse(&data)?;
+        if packet.header.is_query() {
+            for question in &packet.questions {
+                debug!("question {}", question.name);
+
+                for service in &self.services {
+                    if question.r#type == ResourceType::PTR && question.name.equals(service.r#type) {
+                        let (answers, additionals) = self.create_response(service);
+                        let response = Packet::new_response(packet.header.id(), Vec::new(), answers, Vec::new(), additionals);
+
+                        return Some(response.write());
+                    }
                 }
             }
-            return result;
-        })
-        .await?;
-        debug!("receive from {}, raw {:?}", message.origin_address, message.data);
-
-        let response = handle_packet(&message.data, &service, &hostname);
-
-        if let Some(response) = response {
-            debug!("sending response to {:?}, raw {:?}", message.origin_address, response);
-            socket.send(&response, &message.interface)?;
         }
-    }
-}
 
-fn handle_packet(data: &[u8], service: &Service, hostname: &str) -> Option<Vec<u8>> {
-    let packet = Packet::parse(&data)?;
-    if packet.header.is_query() {
-        for question in &packet.questions {
-            debug!("question {}", question.name);
-
-            if question.r#type == ResourceType::PTR && question.name.equals(service.r#type) {
-                let (answers, additionals) = create_response(service, hostname);
-                let response = Packet::new_response(packet.header.id(), Vec::new(), answers, Vec::new(), additionals);
-
-                return Some(response.write());
-            }
-        }
+        None
     }
 
-    None
-}
+    fn create_response(&self, service: &Service) -> (Vec<ResourceRecord>, Vec<ResourceRecord>) {
+        let ip = Ipv4Addr::new(192, 168, 1, 1);
 
-fn create_response(service: &Service, hostname: &str) -> (Vec<ResourceRecord>, Vec<ResourceRecord>) {
-    let ip = Ipv4Addr::new(192, 168, 1, 1);
+        // PTR answer
+        let answer = ResourceRecord::new(service.r#type, 3600, ResourceRecordData::PTR(Name::new(service.name)));
 
-    // PTR answer
-    let answer = ResourceRecord::new(service.r#type, 3600, ResourceRecordData::PTR(Name::new(service.name)));
+        // SRV record
+        let srv = ResourceRecord::new(
+            service.name,
+            3600,
+            ResourceRecordData::SRV {
+                priority: 0,
+                weight: 0,
+                port: service.port,
+                target: Name::new(&self.hostname),
+            },
+        );
 
-    // SRV record
-    let srv = ResourceRecord::new(
-        service.name,
-        3600,
-        ResourceRecordData::SRV {
-            priority: 0,
-            weight: 0,
-            port: service.port,
-            target: Name::new(hostname),
-        },
-    );
+        // TXT record
+        let txt = ResourceRecord::new(
+            service.name,
+            3600,
+            ResourceRecordData::TXT(service.txt.iter().map(|x| (*x).into()).collect()),
+        );
 
-    // TXT record
-    let txt = ResourceRecord::new(
-        service.name,
-        3600,
-        ResourceRecordData::TXT(service.txt.iter().map(|x| (*x).into()).collect()),
-    );
+        // A RECORD
+        let a = ResourceRecord::new(&self.hostname, 3600, ResourceRecordData::A(ip));
 
-    // A RECORD
-    let a = ResourceRecord::new(hostname, 3600, ResourceRecordData::A(ip));
-
-    (vec![answer], vec![srv, txt, a])
+        (vec![answer], vec![srv, txt, a])
+    }
 }
