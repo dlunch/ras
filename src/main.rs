@@ -16,11 +16,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     });
 
     let mdns_join_handle = spawn(async {
-        let service = mdns::Service {
-            r#type: "_raop._tcp.local",
-            name: "tcp",
-            port: 7000,
-            txt: vec![
+        let service = mdns::Service::new(
+            "_raop._tcp",
+            "test",
+            7000,
+            vec![
                 "am=AppleTV3,2",
                 "cn=0,1,2,3",
                 "da=true",
@@ -32,8 +32,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 "vs=220.68",
                 "vv=2",
             ],
-        };
-
+        );
         let server = mdns::Server::new(vec![service]).unwrap();
         server.serve().await.unwrap();
     });

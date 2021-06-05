@@ -1,6 +1,29 @@
 pub struct Service {
-    pub r#type: &'static str,
-    pub name: &'static str,
-    pub port: u16,
-    pub txt: Vec<&'static str>,
+    pub(super) r#type: String,
+    pub(super) name: String,
+    pub(super) port: u16,
+    pub(super) txt: Vec<String>,
+}
+
+impl Service {
+    pub fn new(r#type: &str, name: &str, port: u16, txt: Vec<&str>) -> Self {
+        let r#type = if r#type.ends_with(".local") {
+            format!("{}.local", r#type)
+        } else {
+            r#type.into()
+        };
+
+        let name = if name.ends_with(".local") {
+            format!("{}.local", name)
+        } else {
+            name.into()
+        };
+
+        Self {
+            r#type,
+            name,
+            port,
+            txt: txt.into_iter().map(|x| x.into()).collect::<Vec<_>>(),
+        }
+    }
 }
