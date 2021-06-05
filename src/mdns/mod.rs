@@ -27,7 +27,10 @@ pub struct MdnsServer {
 
 impl MdnsServer {
     pub fn new(services: Vec<Service>) -> io::Result<Self> {
-        let hostname = hostname::get()?.into_string().unwrap();
+        let mut hostname = hostname::get()?.into_string().unwrap();
+        if !hostname.ends_with(".local") {
+            hostname = format!("{}.local", hostname);
+        }
         debug!("hostname: {}", hostname);
 
         Ok(Self { services, hostname })
