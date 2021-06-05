@@ -34,7 +34,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             ],
         };
 
-        let server = mdns::MdnsServer::new(vec![service]).unwrap();
+        let server = mdns::Server::new(vec![service]).unwrap();
         server.serve().await.unwrap();
     });
 
