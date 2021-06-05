@@ -653,6 +653,7 @@ dependencies = [
  "bitflags",
  "futures",
  "hostname",
+ "lazy_static",
  "log",
  "maplit",
  "multicast-socket",

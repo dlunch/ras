@@ -5,12 +5,16 @@ use std::{
     time::Duration,
 };
 
-use async_std::task::spawn_blocking;
+use async_std::{net::UdpSocket, task::spawn_blocking};
 use log::debug;
-use multicast_socket::{all_ipv4_interfaces, MulticastOptions, MulticastSocket};
+use multicast_socket::{all_ipv4_interfaces, Message, MulticastOptions, MulticastSocket};
 
 use super::packet::{Name, Packet, ResourceRecord, ResourceRecordData, ResourceType};
 use super::Service;
+
+lazy_static::lazy_static! {
+    static ref MDNS_ADDR: Ipv4Addr = Ipv4Addr::new(224, 0, 0, 251);
+}
 
 pub struct Server {
     services: Vec<Service>,
@@ -29,11 +33,9 @@ impl Server {
     }
 
     pub async fn serve(&self) -> io::Result<()> {
-        let mdns_addr = Ipv4Addr::new(224, 0, 0, 251);
-
         let interfaces = all_ipv4_interfaces()?;
         let socket = Arc::new(MulticastSocket::with_options(
-            SocketAddrV4::new(mdns_addr, 5353),
+            SocketAddrV4::new(*MDNS_ADDR, 5353),
             interfaces,
             MulticastOptions {
                 read_timeout: Duration::from_secs(60), // MulticastSocket doesn't let us to use infinite timeout here
@@ -57,30 +59,58 @@ impl Server {
             .await?;
             debug!("receive from {}, raw {:?}", message.origin_address, message.data);
 
-            let response = self.handle_packet(&message.data);
+            if let Some((unicast_response, multicast_response)) = self.handle_packet(&message) {
+                if let Some(unicast_response) = unicast_response {
+                    let response = unicast_response.write();
 
-            if let Some(response) = response {
-                debug!("sending response to {:?}, raw {:?}", message.origin_address, response);
-                socket.send(&response, &message.interface)?;
+                    debug!("sending response to {:?}, raw {:?}", message.origin_address, response);
+
+                    // MulticastSocket doesn't exposes raw socket to us
+                    let response_socket = UdpSocket::bind("0.0.0.0:5353").await?;
+                    response_socket.send_to(&response, message.origin_address).await?;
+                }
+
+                if let Some(multicast_response) = multicast_response {
+                    let response = multicast_response.write();
+
+                    debug!("sending response to {:?}, raw {:?}", message.origin_address, response);
+                    socket.send(&response, &message.interface)?;
+                }
             }
         }
     }
 
-    fn handle_packet(&self, data: &[u8]) -> Option<Vec<u8>> {
-        let packet = Packet::parse(&data)?;
+    fn handle_packet(&self, message: &Message) -> Option<(Option<Packet>, Option<Packet>)> {
+        let packet = Packet::parse(&message.data)?;
+
         if packet.header.is_query() {
+            let mut unicast_response = (Vec::new(), Vec::new());
+            let mut multicast_response = (Vec::new(), Vec::new());
+
             for question in &packet.questions {
                 debug!("question {}", question.name);
 
                 for service in &self.services {
                     if question.r#type == ResourceType::PTR && question.name.equals(&service.r#type) {
-                        let (answers, additionals) = self.create_response(service);
-                        let response = Packet::new_response(packet.header.id(), Vec::new(), answers, Vec::new(), additionals);
+                        let (mut answers, mut additionals) = self.create_response(service);
 
-                        return Some(response.write());
+                        if question.unicast {
+                            unicast_response.0.append(&mut answers);
+                            unicast_response.1.append(&mut additionals);
+                        } else {
+                            multicast_response.0.append(&mut answers);
+                            multicast_response.1.append(&mut additionals);
+                        }
                     }
                 }
             }
+
+            let unicast_response = (!unicast_response.0.is_empty() || !unicast_response.1.is_empty())
+                .then(|| Packet::new_response(packet.header.id(), Vec::new(), unicast_response.0, Vec::new(), unicast_response.1));
+            let multicast_response = (!multicast_response.0.is_empty() || !multicast_response.1.is_empty())
+                .then(|| Packet::new_response(packet.header.id(), Vec::new(), multicast_response.0, Vec::new(), multicast_response.1));
+
+            return Some((unicast_response, multicast_response));
         }
 
         None
