@@ -73,7 +73,7 @@ impl Server {
                 debug!("question {}", question.name);
 
                 for service in &self.services {
-                    if question.r#type == ResourceType::PTR && question.name.equals(service.r#type) {
+                    if question.r#type == ResourceType::PTR && question.name.equals(&service.r#type) {
                         let (answers, additionals) = self.create_response(service);
                         let response = Packet::new_response(packet.header.id(), Vec::new(), answers, Vec::new(), additionals);
 
@@ -91,14 +91,14 @@ impl Server {
 
         // PTR answer
         let answers = vec![ResourceRecord::new(
-            service.r#type,
+            &service.r#type,
             3600,
-            ResourceRecordData::PTR(Name::new(service.name)),
+            ResourceRecordData::PTR(Name::new(&service.name)),
         )];
 
         // SRV record
         let mut additionals = vec![ResourceRecord::new(
-            service.name,
+            &service.name,
             3600,
             ResourceRecordData::SRV {
                 priority: 0,
@@ -110,11 +110,7 @@ impl Server {
 
         // TXT record
         if !service.txt.is_empty() {
-            additionals.push(ResourceRecord::new(
-                service.name,
-                3600,
-                ResourceRecordData::TXT(service.txt.iter().map(|x| (*x).into()).collect()),
-            ));
+            additionals.push(ResourceRecord::new(&service.name, 3600, ResourceRecordData::TXT(service.txt.clone())));
         }
 
         // A record
