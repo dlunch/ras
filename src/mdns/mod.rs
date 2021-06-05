@@ -11,7 +11,7 @@ use async_std::task::spawn_blocking;
 use log::debug;
 use multicast_socket::{all_ipv4_interfaces, MulticastOptions, MulticastSocket};
 
-use packet::{Name, Packet, ResourceRecord, ResourceRecordData};
+use packet::{Name, Packet, ResourceRecord, ResourceRecordData, ResourceType};
 
 pub struct Service {
     pub r#type: &'static str,
@@ -66,8 +66,9 @@ fn handle_packet(data: &[u8], service: &Service, hostname: &str) -> Option<Vec<u
         for question in &packet.questions {
             debug!("question {}", question.name);
 
-            if question.name.equals(service.r#type) {
-                let response = create_response(packet.header.id(), service, hostname);
+            if question.r#type == ResourceType::PTR && question.name.equals(service.r#type) {
+                let (answers, additionals) = create_response(service, hostname);
+                let response = Packet::new_response(packet.header.id(), Vec::new(), answers, Vec::new(), additionals);
 
                 return Some(response.write());
             }
@@ -77,7 +78,7 @@ fn handle_packet(data: &[u8], service: &Service, hostname: &str) -> Option<Vec<u
     None
 }
 
-fn create_response(id: u16, service: &Service, hostname: &str) -> Packet {
+fn create_response(service: &Service, hostname: &str) -> (Vec<ResourceRecord>, Vec<ResourceRecord>) {
     let ip = Ipv4Addr::new(192, 168, 1, 1);
 
     // PTR answer
@@ -105,5 +106,5 @@ fn create_response(id: u16, service: &Service, hostname: &str) -> Packet {
     // A RECORD
     let a = ResourceRecord::new(hostname, 3600, ResourceRecordData::A(ip));
 
-    Packet::new_response(id, Vec::new(), vec![answer], Vec::new(), vec![srv, txt, a])
+    (vec![answer], vec![srv, txt, a])
 }
