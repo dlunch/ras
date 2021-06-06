@@ -7,13 +7,13 @@ pub struct Service {
 
 impl Service {
     pub fn new(r#type: &str, name: &str, port: u16, txt: Vec<&str>) -> Self {
-        let r#type = if r#type.ends_with(".local") {
+        let r#type = if !r#type.ends_with(".local") {
             format!("{}.local", r#type)
         } else {
             r#type.into()
         };
 
-        let name = if name.ends_with(".local") {
+        let name = if !name.ends_with(".local") {
             format!("{}.local", name)
         } else {
             name.into()
