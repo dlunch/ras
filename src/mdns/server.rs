@@ -12,10 +12,6 @@ use multicast_socket::{all_ipv4_interfaces, Message, MulticastOptions, Multicast
 use super::packet::{Name, Packet, ResourceRecord, ResourceRecordData, ResourceType};
 use super::Service;
 
-lazy_static::lazy_static! {
-    static ref MDNS_ADDR: Ipv4Addr = Ipv4Addr::new(224, 0, 0, 251);
-}
-
 pub struct Server {
     services: Vec<Service>,
     hostname: String,
@@ -33,9 +29,11 @@ impl Server {
     }
 
     pub async fn serve(&self) -> io::Result<()> {
+        let mdns_addr = Ipv4Addr::new(224, 0, 0, 251);
+
         let interfaces = all_ipv4_interfaces()?;
         let socket = Arc::new(MulticastSocket::with_options(
-            SocketAddrV4::new(*MDNS_ADDR, 5353),
+            SocketAddrV4::new(mdns_addr, 5353),
             interfaces,
             MulticastOptions {
                 read_timeout: Duration::from_secs(60), // MulticastSocket doesn't let us to use infinite timeout here
