@@ -210,6 +210,7 @@ pub enum ResourceType {
     AAAA = 28,
     SRV = 33,
     OPT = 41,
+    ANY = 255,
 }
 
 impl ResourceType {
@@ -221,6 +222,7 @@ impl ResourceType {
             28 => Self::AAAA,
             33 => Self::SRV,
             41 => Self::OPT,
+            255 => Self::ANY,
             x => panic!("Unknown resourcetype {}", x),
         }
     }
