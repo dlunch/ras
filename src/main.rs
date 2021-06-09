@@ -18,7 +18,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mdns_join_handle = spawn(async {
         let service = mdns::Service::new(
             "_raop._tcp",
-            "test",
+            "test@test",
             7000,
             vec![
                 "am=AppleTV3,2",
