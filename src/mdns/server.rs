@@ -6,6 +6,7 @@ use std::{
 };
 
 use async_std::{net::UdpSocket, task::spawn_blocking};
+use get_if_addrs::{get_if_addrs, Interface};
 use log::debug;
 use multicast_socket::{all_ipv4_interfaces, Message, MulticastOptions, MulticastSocket};
 
@@ -15,6 +16,7 @@ use super::Service;
 pub struct Server {
     services: Vec<Service>,
     hostname: String,
+    interfaces: Vec<Interface>,
 }
 
 impl Server {
@@ -25,7 +27,13 @@ impl Server {
         }
         debug!("hostname: {}", hostname);
 
-        Ok(Self { services, hostname })
+        let interfaces = get_if_addrs()?;
+
+        Ok(Self {
+            services,
+            hostname,
+            interfaces,
+        })
     }
 
     pub async fn serve(&self) -> io::Result<()> {
