@@ -6,7 +6,8 @@ use std::{
 };
 
 use async_std::{net::UdpSocket, task::spawn_blocking};
-use get_if_addrs::{get_if_addrs, Interface};
+use cidr_utils::cidr::Ipv4Cidr;
+use get_if_addrs::{get_if_addrs, IfAddr, Interface};
 use log::debug;
 use multicast_socket::{all_ipv4_interfaces, Message, MulticastOptions, MulticastSocket};
 
@@ -98,7 +99,7 @@ impl Server {
 
                 for service in &self.services {
                     if question.r#type == ResourceType::PTR && question.name.equals(&service.r#type) {
-                        let (mut answers, mut additionals) = self.create_response(service);
+                        let (mut answers, mut additionals) = self.create_response(service, &message.origin_address.ip());
 
                         if question.unicast {
                             unicast_response.0.append(&mut answers);
@@ -122,8 +123,8 @@ impl Server {
         None
     }
 
-    fn create_response(&self, service: &Service) -> (Vec<ResourceRecord>, Vec<ResourceRecord>) {
-        let ip = Ipv4Addr::new(192, 168, 1, 1);
+    fn create_response(&self, service: &Service, remote_addr: &Ipv4Addr) -> (Vec<ResourceRecord>, Vec<ResourceRecord>) {
+        let ip = self.find_interface_ip(remote_addr).unwrap();
 
         // PTR answer
         let answers = vec![ResourceRecord::new(
@@ -153,5 +154,19 @@ impl Server {
         additionals.push(ResourceRecord::new(&self.hostname, 3600, ResourceRecordData::A(ip)));
 
         (answers, additionals)
+    }
+
+    fn find_interface_ip(&self, remote_addr: &Ipv4Addr) -> Option<Ipv4Addr> {
+        for interface in &self.interfaces {
+            if let IfAddr::V4(x) = &interface.addr {
+                let cidr = Ipv4Cidr::from_prefix_and_mask(x.ip, x.netmask).unwrap();
+
+                if cidr.contains(remote_addr) {
+                    return Some(x.ip);
+                }
+            }
+        }
+
+        None
     }
 }
