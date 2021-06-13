@@ -19,7 +19,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let service = mdns::Service::new(
             "_raop._tcp",
             "test@test",
-            7000,
+            5000,
             vec![
                 "am=AppleTV3,2",
                 "cn=0,1,2,3",
