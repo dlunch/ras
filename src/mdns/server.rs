@@ -8,7 +8,7 @@ use std::{
 use async_std::{net::UdpSocket, task::spawn_blocking};
 use cidr_utils::cidr::Ipv4Cidr;
 use get_if_addrs::{get_if_addrs, IfAddr, Interface};
-use log::debug;
+use log::{debug, trace};
 use multicast_socket::{all_ipv4_interfaces, Message, MulticastOptions, MulticastSocket};
 
 use super::packet::{Name, Packet, ResourceRecord, ResourceRecordData, ResourceType};
@@ -64,13 +64,13 @@ impl Server {
                 return result;
             })
             .await?;
-            debug!("receive from {}, raw {:?}", message.origin_address, message.data);
+            trace!("receive from {}, raw {:?}", message.origin_address, message.data);
 
             if let Some((unicast_response, multicast_response)) = self.handle_packet(&message) {
                 if let Some(unicast_response) = unicast_response {
                     let response = unicast_response.write();
 
-                    debug!("sending response to {:?}, raw {:?}", message.origin_address, response);
+                    trace!("sending response to {:?}, raw {:?}", message.origin_address, response);
 
                     // MulticastSocket doesn't exposes raw socket to us
                     let response_socket = UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 0)).await?;
@@ -80,7 +80,7 @@ impl Server {
                 if let Some(multicast_response) = multicast_response {
                     let response = multicast_response.write();
 
-                    debug!("sending response to {:?}, raw {:?}", message.origin_address, response);
+                    trace!("sending response to {:?}, raw {:?}", message.origin_address, response);
                     socket.send(&response, &message.interface)?;
                 }
             }
@@ -95,8 +95,6 @@ impl Server {
             let mut multicast_response = (Vec::new(), Vec::new());
 
             for question in &packet.questions {
-                debug!("question {}", question.name);
-
                 for service in &self.services {
                     if question.r#type == ResourceType::PTR && question.name.equals(&service.r#type) {
                         let (mut answers, mut additionals) = self.create_response(service, &message.origin_address.ip());
@@ -124,6 +122,8 @@ impl Server {
     }
 
     fn create_response(&self, service: &Service, remote_addr: &Ipv4Addr) -> (Vec<ResourceRecord>, Vec<ResourceRecord>) {
+        debug!("Creating response for {}", service.name);
+
         let ip = self.find_interface_ip(remote_addr).unwrap();
 
         // PTR answer
