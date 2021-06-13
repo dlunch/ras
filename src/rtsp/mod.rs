@@ -26,6 +26,8 @@ pub async fn serve(ip: IpAddr, port: u16) -> io::Result<()> {
 
             let res = Response::new(StatusCode::Ok, hashmap! {"CSeq".into() => req.headers.get("CSeq").unwrap().into()});
 
+            println!("res {} {:?}", res.status as u32, res.headers);
+
             res.write(&mut stream).await?;
         }
     }
