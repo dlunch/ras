@@ -1,15 +1,13 @@
 mod request;
 mod response;
+mod session;
 
-use std::str;
-
-use async_std::io;
-use async_std::net::{IpAddr, SocketAddr, TcpListener};
-use async_std::stream::StreamExt;
-use maplit::hashmap;
-
-use request::Request;
-use response::{Response, StatusCode};
+use async_std::{
+    io,
+    net::{IpAddr, SocketAddr, TcpListener},
+    stream::StreamExt,
+    task,
+};
 
 pub async fn serve(ip: IpAddr, port: u16) -> io::Result<()> {
     let listener = TcpListener::bind(SocketAddr::new(ip, port)).await?;
@@ -17,19 +15,9 @@ pub async fn serve(ip: IpAddr, port: u16) -> io::Result<()> {
     let mut incoming = listener.incoming();
 
     while let Some(stream) = incoming.next().await {
-        let mut stream = stream?;
+        let stream = stream?;
 
-        loop {
-            let req = Request::parse(&mut stream).await?;
-
-            println!("req {} {:?} {:?}", req.method, req.headers, str::from_utf8(&req.content).unwrap());
-
-            let res = Response::new(StatusCode::Ok, hashmap! {"CSeq".into() => req.headers.get("CSeq").unwrap().into()});
-
-            println!("res {} {:?}", res.status as u32, res.headers);
-
-            res.write(&mut stream).await?;
-        }
+        task::spawn(async move { session::Session::run(stream).await });
     }
 
     Ok(())
