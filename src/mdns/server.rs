@@ -57,7 +57,8 @@ impl Server {
             let message = spawn_blocking(move || loop {
                 let result = socket2.receive();
                 if let Err(x) = &result {
-                    if x.kind() == io::ErrorKind::TimedOut {
+                    // TimedOut: windows, Other: other
+                    if x.kind() == io::ErrorKind::TimedOut || x.kind() == io::ErrorKind::Other {
                         continue;
                     }
                 }
