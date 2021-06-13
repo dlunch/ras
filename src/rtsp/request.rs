@@ -4,9 +4,9 @@ use async_std::io::{self, prelude::BufReadExt, BufReader, ReadExt};
 use async_std::stream::StreamExt;
 
 pub struct Request {
-    pub(crate) method: String,
-    pub(crate) headers: HashMap<String, String>,
-    pub(crate) content: Vec<u8>,
+    pub(super) method: String,
+    pub(super) headers: HashMap<String, String>,
+    pub(super) content: Vec<u8>,
 }
 
 impl Request {
