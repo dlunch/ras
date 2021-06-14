@@ -17,7 +17,7 @@ pub async fn serve(ip: IpAddr, port: u16) -> io::Result<()> {
     while let Some(stream) = incoming.next().await {
         let stream = stream?;
 
-        task::spawn(async move { session::Session::run(stream).await });
+        task::spawn(async move { session::Session::start(stream).await });
     }
 
     Ok(())
