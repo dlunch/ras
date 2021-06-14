@@ -19,8 +19,8 @@ impl StatusCode {
 }
 
 pub struct Response {
-    pub(crate) status: StatusCode,
-    pub(crate) headers: HashMap<String, String>,
+    pub(super) status: StatusCode,
+    pub(super) headers: HashMap<String, String>,
 }
 
 impl Response {
