@@ -12,14 +12,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     pretty_env_logger::init();
 
     let rtsp_join_handle = spawn(async {
-        rtsp::serve(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 5000).await.unwrap();
+        rtsp::serve(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 7000).await.unwrap();
     });
 
     let mdns_join_handle = spawn(async {
         let service = mdns::Service::new(
             "_raop._tcp",
             "test@test",
-            5000,
+            7000,
             vec![
                 "am=AppleTV3,2",
                 "cn=0,1,2,3",
