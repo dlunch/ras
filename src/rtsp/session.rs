@@ -23,6 +23,11 @@ impl Session {
     async fn run(&mut self) -> io::Result<()> {
         loop {
             let req = Request::parse(&mut self.stream).await?;
+            if req.is_none() {
+                break;
+            }
+            let req = req.unwrap();
+
             println!("req {} {:?} {:?}", req.method, req.headers, str::from_utf8(&req.content).unwrap());
 
             let res = self.handle_request(&req);
@@ -30,6 +35,8 @@ impl Session {
 
             res.write(&mut self.stream).await?;
         }
+
+        Ok(())
     }
 
     fn handle_request(&self, request: &Request) -> Response {
