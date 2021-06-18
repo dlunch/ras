@@ -20,11 +20,11 @@ impl StatusCode {
 
 pub struct Response {
     pub(super) status: StatusCode,
-    pub(super) headers: HashMap<String, String>,
+    pub(super) headers: HashMap<&'static str, String>,
 }
 
 impl Response {
-    pub fn new(status: StatusCode, headers: HashMap<String, String>) -> Self {
+    pub fn new(status: StatusCode, headers: HashMap<&'static str, String>) -> Self {
         Self { status, headers }
     }
 
@@ -56,7 +56,7 @@ mod test {
 
     #[async_std::test]
     async fn test_simple_response() {
-        let response = Response::new(StatusCode::Ok, hashmap! { "Test".into() => "Test".into() });
+        let response = Response::new(StatusCode::Ok, hashmap! { "Test" => "Test".into() });
 
         let mut buf = Vec::new();
         response.write(&mut buf).await.unwrap();
