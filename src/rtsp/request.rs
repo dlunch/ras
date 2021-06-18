@@ -1,34 +1,37 @@
 use std::collections::HashMap;
 
 use async_std::io::{self, prelude::BufReadExt, BufReader, ReadExt};
-use async_std::stream::StreamExt;
+use futures::{future, stream::TryStreamExt};
 
 pub struct Request {
     pub(super) method: String,
+    pub(super) path: String,
     pub(super) headers: HashMap<String, String>,
     pub(super) content: Vec<u8>,
 }
 
 impl Request {
-    pub async fn parse<S>(stream: S) -> io::Result<Self>
+    pub async fn parse<S>(stream: S) -> io::Result<Option<Self>>
     where
         S: io::Read + Unpin,
     {
         let mut reader = BufReader::new(stream);
-        let mut lines = reader.by_ref().lines();
+        let lines = reader
+            .by_ref()
+            .lines()
+            .try_take_while(|x| future::ready(Ok(!x.is_empty())))
+            .try_collect::<Vec<_>>()
+            .await?;
 
-        let method_line = lines.next().await.unwrap()?;
+        if lines.len() < 2 {
+            return Ok(None);
+        }
 
-        let split = method_line.split(' ').collect::<Vec<_>>();
-        let (method, _, _) = (split[0].into(), split[1], split[2]);
+        let split = lines[0].split(' ').collect::<Vec<_>>();
+        let (method, path, _) = (split[0].into(), split[1].into(), split[2]);
 
         let mut headers = HashMap::new();
-        loop {
-            let header_line = lines.next().await.unwrap()?;
-            if header_line.is_empty() {
-                break;
-            }
-
+        for header_line in lines.into_iter().skip(1) {
             let split = header_line.split(':').collect::<Vec<_>>();
 
             let (key, value) = (split[0].trim().to_owned(), split[1].trim().to_owned());
@@ -48,6 +51,30 @@ impl Request {
             Vec::new()
         };
 
-        Ok(Self { method, headers, content })
+        Ok(Some(Self {
+            method,
+            path,
+            headers,
+            content,
+        }))
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[async_std::test]
+    async fn test_simple_request() -> io::Result<()> {
+        let data = "GET /info RTSP/1.0\r\nX-Apple-ProtocolVersion: 1\r\nCSeq: 0\r\n\r\n";
+
+        let req = Request::parse(data.as_bytes()).await?;
+        assert!(req.is_some());
+
+        let req = req.unwrap();
+        assert_eq!(req.method, "GET");
+        assert_eq!(req.path, "/info");
+
+        Ok(())
     }
 }
