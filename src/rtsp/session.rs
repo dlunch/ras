@@ -1,4 +1,4 @@
-use std::{collections::HashMap, hash::Hash, io, str};
+use std::{collections::HashMap, io, str};
 
 use async_std::net::TcpStream;
 use log::warn;
@@ -28,7 +28,13 @@ impl Session {
             }
             let req = req.unwrap();
 
-            println!("req {} {:?} {:?}", req.method, req.headers, str::from_utf8(&req.content).unwrap());
+            println!(
+                "req {} {} {:?} {:?}",
+                req.method,
+                req.path,
+                req.headers,
+                str::from_utf8(&req.content).unwrap()
+            );
 
             let res = self.handle_request(&req);
             println!("res {} {:?}", res.status as u32, res.headers);
@@ -52,14 +58,18 @@ impl Session {
             }
         };
 
-        header.insert("CSeq".into(), cseq.into());
+        header.insert("CSeq", cseq.into());
 
         Response::new(status, header)
     }
 
-    fn setup(&self, request: &Request) -> (StatusCode, HashMap<String, String>) {
-        // let transport = request.headers.get("Transport").unwrap();
+    fn setup(&self, request: &Request) -> (StatusCode, HashMap<&'static str, String>) {
+        let transport = request.headers.get("Transport").unwrap();
 
-        (StatusCode::Ok, HashMap::new())
+        let response_headers = hashmap! {
+            "Transport" => transport.into()
+        };
+
+        (StatusCode::Ok, response_headers)
     }
 }
