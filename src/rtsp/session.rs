@@ -10,6 +10,7 @@ use super::{
 };
 
 pub struct Session {
+    id: u32,
     stream: TcpStream,
     rtp: Option<UdpSocket>,
     control: Option<UdpSocket>,
@@ -17,8 +18,9 @@ pub struct Session {
 }
 
 impl Session {
-    pub async fn start(stream: TcpStream) -> io::Result<()> {
+    pub async fn start(id: u32, stream: TcpStream) -> io::Result<()> {
         let mut session = Self {
+            id,
             stream,
             rtp: None,
             control: None,
@@ -88,6 +90,7 @@ impl Session {
         );
 
         let response_headers = hashmap! {
+            "Session" => self.id.to_string(),
             "Transport" => transport
         };
 
