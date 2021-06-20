@@ -59,6 +59,8 @@ impl Session {
         let cseq = request.headers.get("CSeq").unwrap();
 
         let (status, mut header) = match request.method.as_str() {
+            "GET" => (StatusCode::NotFound, HashMap::new()),
+            "POST" => (StatusCode::Ok, HashMap::new()),
             "ANNOUNCE" => (StatusCode::Ok, HashMap::new()),
             "SETUP" => self.setup(request).await?,
             _ => {
