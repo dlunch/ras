@@ -14,10 +14,12 @@ pub async fn serve(ip: IpAddr, port: u16) -> io::Result<()> {
 
     let mut incoming = listener.incoming();
 
+    let mut id = 1;
     while let Some(stream) = incoming.next().await {
         let stream = stream?;
 
-        task::spawn(async move { session::Session::start(stream).await });
+        task::spawn(async move { session::Session::start(id, stream).await });
+        id += 1;
     }
 
     Ok(())
