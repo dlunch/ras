@@ -1,3 +1,3 @@
 # Rust Airplay Server
 
-WIP
+Only RAOP service (Airplay 1 audio) is implemented now.
