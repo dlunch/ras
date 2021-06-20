@@ -32,18 +32,17 @@ impl Response {
     where
         S: io::Write + Unpin,
     {
-        let status_line = format!("RTSP/1.0 {} {}\r\n", self.status as usize, self.status.as_string());
-
-        stream.write(status_line.as_bytes()).await?;
+        let mut result = Vec::with_capacity(256);
+        result.extend(format!("RTSP/1.0 {} {}\r\n", self.status as usize, self.status.as_string()).as_bytes());
 
         for (key, value) in &self.headers {
             let header_line = format!("{}: {}\r\n", key, value);
 
-            stream.write(header_line.as_bytes()).await?;
+            result.extend(header_line.as_bytes());
         }
+        result.extend("\r\n".as_bytes());
 
-        stream.write("\r\n".as_bytes()).await?;
-
+        stream.write(&result).await?;
         Ok(())
     }
 }
