@@ -1,7 +1,7 @@
 use std::{collections::HashMap, io, str};
 
 use async_std::net::{Ipv4Addr, SocketAddrV4, TcpStream, UdpSocket};
-use log::{debug, warn};
+use log::{debug, trace, warn};
 use maplit::hashmap;
 
 use super::{
@@ -38,7 +38,7 @@ impl Session {
             }
             let req = req.unwrap();
 
-            println!(
+            trace!(
                 "req {} {} {:?} {:?}",
                 req.method,
                 req.path,
@@ -47,7 +47,7 @@ impl Session {
             );
 
             let res = self.handle_request(&req).await?;
-            println!("res {} {:?}", res.status as u32, res.headers);
+            trace!("res {} {:?}", res.status as u32, res.headers);
 
             res.write(&mut self.stream).await?;
         }
