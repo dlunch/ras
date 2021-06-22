@@ -1,8 +1,12 @@
 use std::{collections::HashMap, io, str};
 
-use async_std::net::{Ipv4Addr, SocketAddrV4, TcpStream, UdpSocket};
+use async_std::{
+    net::{Ipv4Addr, SocketAddrV4, TcpStream, UdpSocket},
+    task,
+};
 use log::{debug, trace, warn};
 use maplit::hashmap;
+use rtp_rs::RtpReader;
 
 use super::{
     request::Request,
@@ -12,25 +16,16 @@ use super::{
 pub struct Session {
     id: u32,
     stream: TcpStream,
-    rtp: Option<UdpSocket>,
-    control: Option<UdpSocket>,
-    timing: Option<UdpSocket>,
 }
 
 impl Session {
     pub async fn start(id: u32, stream: TcpStream) -> io::Result<()> {
-        let mut session = Self {
-            id,
-            stream,
-            rtp: None,
-            control: None,
-            timing: None,
-        };
+        let mut session = Self { id, stream };
 
-        session.run().await
+        session.rtsp_loop().await
     }
 
-    async fn run(&mut self) -> io::Result<()> {
+    async fn rtsp_loop(&mut self) -> io::Result<()> {
         loop {
             let req = Request::parse(&mut self.stream).await?;
             if req.is_none() {
@@ -62,6 +57,7 @@ impl Session {
             "GET" => (StatusCode::NotFound, HashMap::new()),
             "POST" => (StatusCode::NotFound, HashMap::new()),
             "ANNOUNCE" => (StatusCode::Ok, HashMap::new()),
+            "RECORD" => (StatusCode::Ok, HashMap::new()),
             "SETUP" => self.setup(request).await?,
             _ => {
                 warn!("Unhandled method {}", request.method);
@@ -80,15 +76,15 @@ impl Session {
 
         debug!("client_transport: {:?}", client_transport);
 
-        self.rtp = Some(UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 0)).await?);
-        self.control = Some(UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 0)).await?);
-        self.timing = Some(UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 0)).await?);
+        let rtp = UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 0)).await?;
+        let control = UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 0)).await?;
+        let timing = UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 0)).await?;
 
         let transport = format!(
             "RTP/AVP/UDP;unicast;mode=record;server_port={};control_port={};timing_port={}",
-            self.rtp.as_ref().unwrap().local_addr()?.port(),
-            self.control.as_ref().unwrap().local_addr()?.port(),
-            self.timing.as_ref().unwrap().local_addr()?.port()
+            rtp.local_addr()?.port(),
+            control.local_addr()?.port(),
+            timing.local_addr()?.port()
         );
 
         let response_headers = hashmap! {
@@ -96,6 +92,18 @@ impl Session {
             "Transport" => transport
         };
 
+        task::spawn(async move { Self::rtp_loop(rtp).await.unwrap() });
+
         Ok((StatusCode::Ok, response_headers))
+    }
+
+    async fn rtp_loop(socket: UdpSocket) -> io::Result<()> {
+        loop {
+            let mut buf = [0; 1024];
+            let len = socket.recv(&mut buf).await?;
+
+            let rtp = RtpReader::new(&buf[..len]).map_err(|x| io::Error::new(io::ErrorKind::Other, format!("{:?}", x)))?;
+            trace!("{:?}", rtp);
+        }
     }
 }
