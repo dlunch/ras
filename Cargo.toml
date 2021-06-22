@@ -15,3 +15,4 @@ multicast-socket = { version = "^0.2" }
 hostname = { version = "^0.3" }
 get_if_addrs = { version = "^0.5" }
 cidr-utils = { version = "^0.5" }
+rtp-rs = { version = "^0.6" }
