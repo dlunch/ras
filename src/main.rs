@@ -28,16 +28,17 @@ async fn main() {
             "test@test",
             7000,
             vec![
-                "am=AppleTV3,2",
+                "txtvers=1",
+                "ch=2",
                 "cn=0,1,2,3",
-                "da=true",
-                "et=0,3,5",
+                "et=0",
                 "md=0,1,2",
-                "sf=0x4",
+                "pw=false",
+                "sr=44100",
+                "ss=16",
                 "tp=UDP",
-                "vn=65537",
                 "vs=220.68",
-                "vv=2",
+                "am=AppleTV3,2",
             ],
         );
         let server = mdns::Server::new(vec![service]).unwrap();
