@@ -4,10 +4,10 @@ use async_std::io::{self, prelude::BufReadExt, BufReader, ReadExt};
 use futures::{future, stream::TryStreamExt};
 
 pub struct Request {
-    pub(super) method: String,
-    pub(super) path: String,
-    pub(super) headers: HashMap<String, String>,
-    pub(super) content: Vec<u8>,
+    pub method: String,
+    pub path: String,
+    pub headers: HashMap<String, String>,
+    pub content: Vec<u8>,
 }
 
 impl Request {
