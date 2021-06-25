@@ -98,7 +98,7 @@ impl Server {
             for question in &packet.questions {
                 for service in &self.services {
                     if question.r#type == ResourceType::PTR && question.name.equals(&service.r#type) {
-                        let (mut answers, mut additionals) = self.create_response(service, &message.origin_address.ip());
+                        let (mut answers, mut additionals) = self.create_response(service, message.origin_address.ip());
 
                         if question.unicast {
                             unicast_response.0.append(&mut answers);
