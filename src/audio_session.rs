@@ -8,17 +8,14 @@ use log::{debug, trace, warn};
 use maplit::hashmap;
 use rtp_rs::RtpReader;
 
-use super::{
-    request::Request,
-    response::{Response, StatusCode},
-};
+use super::rtsp::{Request, Response, StatusCode};
 
-pub struct Session {
+pub struct AudioSession {
     id: u32,
     stream: TcpStream,
 }
 
-impl Session {
+impl AudioSession {
     pub async fn start(id: u32, stream: TcpStream) -> io::Result<()> {
         let mut session = Self { id, stream };
 
