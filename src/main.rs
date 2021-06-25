@@ -1,5 +1,5 @@
-mod audio_session;
 mod mdns;
+mod raop_session;
 mod rtsp;
 
 use std::future::Future;
@@ -16,8 +16,8 @@ use futures::join;
 async fn main() {
     pretty_env_logger::init();
 
-    let audio_join_handle = spawn(async {
-        serve(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 7000, audio_session::AudioSession::start)
+    let raop_join_handle = spawn(async {
+        serve(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 7000, raop_session::RaopSession::start)
             .await
             .unwrap();
     });
@@ -45,7 +45,7 @@ async fn main() {
         server.serve().await.unwrap();
     });
 
-    join!(audio_join_handle, mdns_join_handle);
+    join!(raop_join_handle, mdns_join_handle);
 }
 
 pub async fn serve<F>(ip: IpAddr, port: u16, handler: impl Fn(u32, TcpStream) -> F) -> io::Result<()>

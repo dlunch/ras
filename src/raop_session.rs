@@ -10,12 +10,12 @@ use rtp_rs::RtpReader;
 
 use super::rtsp::{Request, Response, StatusCode};
 
-pub struct AudioSession {
+pub struct RaopSession {
     id: u32,
     stream: TcpStream,
 }
 
-impl AudioSession {
+impl RaopSession {
     pub async fn start(id: u32, stream: TcpStream) -> io::Result<()> {
         let mut session = Self { id, stream };
 
