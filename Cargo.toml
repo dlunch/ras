@@ -16,3 +16,4 @@ hostname = { version = "^0.3" }
 get_if_addrs = { version = "^0.5" }
 cidr-utils = { version = "^0.5" }
 rtp-rs = { version = "^0.6" }
+alac = { version = "^0.5", default-features = false }
