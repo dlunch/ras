@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io, str};
+use std::{collections::HashMap, io, str, sync::Arc};
 
 use async_std::{
     net::{Ipv4Addr, SocketAddrV4, TcpStream, UdpSocket},
@@ -11,22 +11,25 @@ use rtp_rs::RtpReader;
 use super::{
     decoder::{AppleLoselessDecoder, Decoder},
     rtsp::{Request, Response, StatusCode},
+    sink::AudioSink,
 };
 
 pub struct RaopSession {
     id: u32,
     stream: TcpStream,
-    rtp_map: Option<i8>,
+    rtp_type: Option<u8>,
     decoder: Option<Box<dyn Decoder>>,
+    sink: Arc<Box<dyn AudioSink>>,
 }
 
 impl RaopSession {
-    pub async fn start(id: u32, stream: TcpStream) -> io::Result<()> {
+    pub async fn start(id: u32, stream: TcpStream, sink: Arc<Box<dyn AudioSink>>) -> io::Result<()> {
         let mut session = Self {
             id,
             stream,
-            rtp_map: None,
+            rtp_type: None,
             decoder: None,
+            sink,
         };
 
         session.rtsp_loop().await
@@ -88,7 +91,7 @@ impl RaopSession {
                 let content = &line["a=rtpmap".len() + 1..];
                 let mut split = content.split(' ');
 
-                self.rtp_map = Some(split.next().unwrap().parse().unwrap());
+                self.rtp_type = Some(split.next().unwrap().parse().unwrap());
                 codec = Some(split.next().unwrap());
             } else if line.starts_with("a=fmtp") {
                 // a=fmtp:96 352 0 16 40 10 14 2 255 0 0 44100
@@ -127,18 +130,25 @@ impl RaopSession {
             "Transport" => transport
         };
 
-        task::spawn(async move { Self::rtp_loop(rtp).await.unwrap() });
+        let rtp_type = self.rtp_type.take().unwrap();
+        let decoder = self.decoder.take().unwrap();
+        let sink = self.sink.clone();
+        task::spawn(async move { Self::rtp_loop(rtp, rtp_type, decoder, sink).await.unwrap() });
 
         Ok((StatusCode::Ok, response_headers))
     }
 
-    async fn rtp_loop(socket: UdpSocket) -> io::Result<()> {
+    async fn rtp_loop(socket: UdpSocket, rtp_type: u8, mut decoder: Box<dyn Decoder>, sink: Arc<Box<dyn AudioSink>>) -> io::Result<()> {
         loop {
             let mut buf = [0; 1024];
             let len = socket.recv(&mut buf).await?;
 
             let rtp = RtpReader::new(&buf[..len]).map_err(|x| io::Error::new(io::ErrorKind::Other, format!("{:?}", x)))?;
-            trace!("{:?}", rtp);
+
+            if rtp.payload_type() == rtp_type {
+                let decoded_content = decoder.decode(rtp.payload());
+                sink.write(&decoded_content);
+            }
         }
     }
 }
