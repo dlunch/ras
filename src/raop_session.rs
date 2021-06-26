@@ -140,7 +140,7 @@ impl RaopSession {
 
     async fn rtp_loop(socket: UdpSocket, rtp_type: u8, mut decoder: Box<dyn Decoder>, sink: Arc<Box<dyn AudioSink>>) -> io::Result<()> {
         loop {
-            let mut buf = [0; 1024];
+            let mut buf = [0; 2048];
             let len = socket.recv(&mut buf).await?;
 
             let rtp = RtpReader::new(&buf[..len]).map_err(|x| io::Error::new(io::ErrorKind::Other, format!("{:?}", x)))?;
