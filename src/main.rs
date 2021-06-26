@@ -2,8 +2,9 @@ mod decoder;
 mod mdns;
 mod raop_session;
 mod rtsp;
+mod sink;
 
-use std::future::Future;
+use std::{future::Future, sync::Arc};
 
 use async_std::{
     io,
@@ -17,10 +18,14 @@ use futures::join;
 async fn main() {
     pretty_env_logger::init();
 
-    let raop_join_handle = spawn(async {
-        serve(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 7000, raop_session::RaopSession::start)
-            .await
-            .unwrap();
+    let audio_sink: Arc<Box<dyn sink::AudioSink>> = Arc::new(Box::new(sink::DummyAudioSink::new()));
+
+    let raop_join_handle = spawn(async move {
+        serve(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 7000, |id, stream| {
+            raop_session::RaopSession::start(id, stream, audio_sink.clone())
+        })
+        .await
+        .unwrap();
     });
 
     let mdns_join_handle = spawn(async {
