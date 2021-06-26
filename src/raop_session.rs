@@ -8,16 +8,26 @@ use log::{debug, trace, warn};
 use maplit::hashmap;
 use rtp_rs::RtpReader;
 
-use super::rtsp::{Request, Response, StatusCode};
+use super::{
+    decoder::{AppleLoselessDecoder, Decoder},
+    rtsp::{Request, Response, StatusCode},
+};
 
 pub struct RaopSession {
     id: u32,
     stream: TcpStream,
+    rtp_map: Option<i8>,
+    decoder: Option<Box<dyn Decoder>>,
 }
 
 impl RaopSession {
     pub async fn start(id: u32, stream: TcpStream) -> io::Result<()> {
-        let mut session = Self { id, stream };
+        let mut session = Self {
+            id,
+            stream,
+            rtp_map: None,
+            decoder: None,
+        };
 
         session.rtsp_loop().await
     }
@@ -53,7 +63,7 @@ impl RaopSession {
         let (status, mut header) = match request.method.as_str() {
             "GET" => (StatusCode::NotFound, HashMap::new()),
             "POST" => (StatusCode::NotFound, HashMap::new()),
-            "ANNOUNCE" => (StatusCode::Ok, HashMap::new()),
+            "ANNOUNCE" => self.announce(request).await?,
             "RECORD" => (StatusCode::Ok, HashMap::new()),
             "SETUP" => self.setup(request).await?,
             _ => {
@@ -66,6 +76,34 @@ impl RaopSession {
         header.insert("CSeq", cseq.into());
 
         Ok(Response::new(status, header))
+    }
+
+    async fn announce(&mut self, request: &Request) -> io::Result<(StatusCode, HashMap<&'static str, String>)> {
+        let mut codec = None;
+        let mut fmtp = None;
+        for line in str::from_utf8(&request.content).unwrap().lines() {
+            if line.starts_with("a=rtpmap") {
+                // a=rtpmap:96 AppleLossless
+
+                let content = &line["a=rtpmap".len() + 1..];
+                let mut split = content.split(' ');
+
+                self.rtp_map = Some(split.next().unwrap().parse().unwrap());
+                codec = Some(split.next().unwrap());
+            } else if line.starts_with("a=fmtp") {
+                // a=fmtp:96 352 0 16 40 10 14 2 255 0 0 44100
+                fmtp = Some(&line[line.find(' ').unwrap() + 1..]);
+            }
+        }
+
+        debug!("codec: {:?}, fmtp: {:?}", codec, fmtp);
+
+        match codec.unwrap() {
+            "AppleLossless" => self.decoder = Some(Box::new(AppleLoselessDecoder::new(fmtp.unwrap()))),
+            unk => panic!("Unknown codec {:?}", unk),
+        }
+
+        Ok((StatusCode::Ok, HashMap::new()))
     }
 
     async fn setup(&mut self, request: &Request) -> io::Result<(StatusCode, HashMap<&'static str, String>)> {

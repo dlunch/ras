@@ -1,6 +1,6 @@
 use alac::{Decoder as AlacDecoder, StreamInfo};
 
-pub trait Decoder {
+pub trait Decoder: Send {
     fn decode(&mut self, raw: &[u8]) -> Vec<i32>;
 }
 
