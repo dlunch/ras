@@ -11,9 +11,8 @@ dependencies = [
 
 [[package]]
 name = "alac"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "498a34d3cad5f3b23cc217ab489424ebcfffed186e30ad5ac02624e50df2c2b8"
+version = "0.5.1"
+source = "git+https://github.com/dlunch/alac.rs#99f61c0bc80fb2f105e44fe5b9150fbcbf5b5ca6"
 
 [[package]]
 name = "async-attributes"
