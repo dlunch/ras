@@ -146,7 +146,11 @@ impl RaopSession {
             let rtp = RtpReader::new(&buf[..len]).map_err(|x| io::Error::new(io::ErrorKind::Other, format!("{:?}", x)))?;
 
             if rtp.payload_type() == rtp_type {
-                let decoded_content = decoder.decode(rtp.payload());
+                let mut payload = rtp.payload().to_vec();
+                payload[rtp.payload().len() - 1] |= 1;
+                payload.push(0xC0); // we have to provide end marker for alac.rs
+
+                let decoded_content = decoder.decode(&payload);
                 sink.write(&decoded_content);
             }
         }
