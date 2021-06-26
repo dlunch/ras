@@ -1,3 +1,4 @@
+mod decoder;
 mod mdns;
 mod raop_session;
 mod rtsp;
