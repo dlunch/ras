@@ -20,7 +20,7 @@ impl AppleLoselessDecoder {
 impl Decoder for AppleLoselessDecoder {
     fn decode(&mut self, raw: &[u8]) -> Vec<i32> {
         let mut out = vec![0; self.decoder.stream_info().max_samples_per_packet() as usize];
-        self.decoder.decode_packet(raw, &mut out).unwrap();
+        self.decoder.decode_packet(raw, &mut out, true).unwrap();
 
         out
     }
