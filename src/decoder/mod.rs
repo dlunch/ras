@@ -1,7 +1,7 @@
 use alac::{Decoder as AlacDecoder, StreamInfo};
 
 pub trait Decoder: Send {
-    fn decode(&mut self, raw: &[u8]) -> Vec<i32>;
+    fn decode(&mut self, raw: &[u8]) -> Vec<u8>;
 }
 
 pub struct AppleLoselessDecoder {
@@ -18,10 +18,20 @@ impl AppleLoselessDecoder {
 }
 
 impl Decoder for AppleLoselessDecoder {
-    fn decode(&mut self, raw: &[u8]) -> Vec<i32> {
+    fn decode(&mut self, raw: &[u8]) -> Vec<u8> {
         let mut out = vec![0; self.decoder.stream_info().max_samples_per_packet() as usize];
         self.decoder.decode_packet(raw, &mut out, true).unwrap();
 
-        out
+        unsafe {
+            let ratio = std::mem::size_of::<u32>() / std::mem::size_of::<u8>();
+
+            let length = out.len() * ratio;
+            let capacity = out.capacity() * ratio;
+            let ptr = out.as_mut_ptr() as *mut u8;
+
+            std::mem::forget(out);
+
+            Vec::from_raw_parts(ptr, length, capacity)
+        }
     }
 }

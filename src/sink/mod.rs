@@ -1,7 +1,7 @@
 use log::trace;
 
 pub trait AudioSink: Send + Sync {
-    fn write(&self, payload: &[i32]);
+    fn write(&self, payload: &[u8]);
 }
 
 pub struct DummyAudioSink {}
@@ -13,7 +13,7 @@ impl DummyAudioSink {
 }
 
 impl AudioSink for DummyAudioSink {
-    fn write(&self, payload: &[i32]) {
+    fn write(&self, payload: &[u8]) {
         trace!("DummyAudioSink::write {:?}", payload);
     }
 }
