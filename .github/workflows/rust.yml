@@ -45,7 +45,7 @@ jobs:
 
       - name: Install required packages
         if: matrix.os == 'ubuntu-latest'
-        run: apt install libpulse-dev
+        run: sudo apt install libpulse-dev
 
       - uses: actions-rs/toolchain@v1
         with:
