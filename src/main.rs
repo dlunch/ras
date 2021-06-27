@@ -18,7 +18,7 @@ use futures::join;
 async fn main() {
     pretty_env_logger::init();
 
-    let audio_sink: Arc<Box<dyn sink::AudioSink>> = Arc::new(Box::new(sink::DummyAudioSink::new()));
+    let audio_sink: Arc<Box<dyn sink::AudioSink>> = Arc::new(sink::create_default_audio_sink());
 
     let raop_join_handle = spawn(async move {
         serve(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 7000, |id, stream| {

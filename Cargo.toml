@@ -17,3 +17,8 @@ get_if_addrs = { version = "^0.5" }
 cidr-utils = { version = "^0.5" }
 rtp-rs = { version = "^0.6" }
 alac = { version = "^0.5", default-features = false, git = "https://github.com/dlunch/alac.rs" }
+cfg-if = { version = "^1.0" }
+
+[target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
+libpulse-binding = { version = "^2.0" }
+libpulse-simple-binding = { version = "^2.0" }
