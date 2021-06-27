@@ -43,6 +43,10 @@ jobs:
           key: ${{ runner.os }}-${{ matrix.rust }}-build-target-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-${{ matrix.rust }}-build-target-
 
+      - name: Install required packages
+        if: matrix.os == 'ubuntu-latest'
+        run: apt install libpulse-dev
+
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
