@@ -147,6 +147,8 @@ impl RaopSession {
 
             let rtp = RtpReader::new(&buf[..len]).map_err(|x| io::Error::new(io::ErrorKind::Other, format!("{:?}", x)))?;
 
+            trace!("RTP type {} seq {:?}", rtp.payload_type(), rtp.sequence_number());
+
             if rtp.payload_type() == rtp_type {
                 let decoded_content = decoder.decode(rtp.payload());
                 session.write(&decoded_content);
