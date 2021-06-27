@@ -1,6 +1,6 @@
 # Rust Airplay Server
 
-Only RAOP service (Airplay 1 audio) is implemented now.
+Only unencrypted RAOP service (Airport Express) is implemented now.
 
 # References
 
