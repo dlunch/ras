@@ -210,6 +210,7 @@ pub enum ResourceType {
     AAAA = 28,
     SRV = 33,
     OPT = 41,
+    NSEC = 47,
     ANY = 255,
 }
 
@@ -222,6 +223,7 @@ impl ResourceType {
             28 => Self::AAAA,
             33 => Self::SRV,
             41 => Self::OPT,
+            47 => Self::NSEC,
             255 => Self::ANY,
             x => panic!("Unknown resourcetype {}", x),
         }
@@ -244,7 +246,7 @@ impl Class {
 
     fn write(&self, stream: &mut WriteStream) {
         match self {
-            Self::IN => stream.write_u16(1),
+            Self::IN => stream.write_u16(0x8001), // with cache flush bit
             Self::Unknown(x) => panic!("Cannot write unknown class {}", x),
         }
     }
