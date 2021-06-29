@@ -495,7 +495,7 @@ mod test {
     // some tests are copied from https://github.com/librespot-org/libmdns/blob/master/src/dns_parser/parser.rs
     #[test]
     fn parse_simple_query() {
-        let query = b"\x06%\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x07example\x03com\x00\x00\x01\x00\x01";
+        let query = b"\x06%\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x07example\x03com\x00\x00\x01\x80\x01";
         let packet = Packet::parse(query).unwrap();
 
         assert_eq!(packet.header.id.get(), 1573);
@@ -520,7 +520,7 @@ mod test {
 
     #[test]
     fn parse_simple_response() {
-        let response =  b"\x06%\x81\x80\x00\x01\x00\x01\x00\x00\x00\x00\x07example\x03com\x00\x00\x01\x00\x01\x07example\x03com\x00\x00\x01\x00\x01\x00\x00\x04\xf8\x00\x04]\xb8\xd8\"";
+        let response =  b"\x06%\x81\x80\x00\x01\x00\x01\x00\x00\x00\x00\x07example\x03com\x00\x00\x01\x80\x01\x07example\x03com\x00\x00\x01\x80\x01\x00\x00\x04\xf8\x00\x04]\xb8\xd8\"";
         let packet = Packet::parse(response).unwrap();
 
         assert_eq!(packet.header.id.get(), 1573);
