@@ -160,6 +160,9 @@ impl Server {
     fn find_interface_ip(&self, remote_addr: &Ipv4Addr) -> Option<Ipv4Addr> {
         for interface in &self.interfaces {
             if let IfAddr::V4(x) = &interface.addr {
+                if x.netmask == Ipv4Addr::new(0, 0, 0, 0) {
+                    continue;
+                }
                 let cidr = Ipv4Cidr::from_prefix_and_mask(x.ip, x.netmask).unwrap();
 
                 if cidr.contains(remote_addr) {
