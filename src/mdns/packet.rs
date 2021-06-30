@@ -7,6 +7,7 @@ use std::{
 };
 
 use bitflags::bitflags;
+use log::debug;
 
 struct ReadStream<'a> {
     buffer: &'a [u8],
@@ -204,14 +205,12 @@ impl fmt::Display for Name {
 #[allow(clippy::upper_case_acronyms)]
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub enum ResourceType {
-    A = 1,
-    PTR = 12,
-    TXT = 16,
-    AAAA = 28,
-    SRV = 33,
-    OPT = 41,
-    NSEC = 47,
-    ANY = 255,
+    A,
+    PTR,
+    TXT,
+    AAAA,
+    SRV,
+    Unknown(u16),
 }
 
 impl ResourceType {
@@ -222,10 +221,22 @@ impl ResourceType {
             16 => Self::TXT,
             28 => Self::AAAA,
             33 => Self::SRV,
-            41 => Self::OPT,
-            47 => Self::NSEC,
-            255 => Self::ANY,
-            x => panic!("Unknown resourcetype {}", x),
+            x => {
+                debug!("Unknown resourcetype {}", x);
+
+                Self::Unknown(x)
+            }
+        }
+    }
+
+    fn write(&self, stream: &mut WriteStream) {
+        match self {
+            Self::A => stream.write_u16(1),
+            Self::PTR => stream.write_u16(12),
+            Self::TXT => stream.write_u16(16),
+            Self::AAAA => stream.write_u16(28),
+            Self::SRV => stream.write_u16(33),
+            Self::Unknown(x) => panic!("Cannot write unknown resourcetype {}", x),
         }
     }
 }
@@ -279,7 +290,7 @@ impl Question {
     fn write(&self, mut stream: &mut WriteStream) {
         self.name.write(&mut stream);
 
-        stream.write_u16(self.r#type as u16);
+        self.r#type.write(&mut stream);
         self.class.write(&mut stream);
     }
 }
@@ -409,7 +420,7 @@ impl ResourceRecord {
     fn write(&self, mut stream: &mut WriteStream) {
         self.name.write(&mut stream);
 
-        stream.write_u16(self.data.r#type() as u16);
+        self.data.r#type().write(&mut stream);
         self.class.write(&mut stream);
         stream.write_u32(self.ttl as u32);
 
