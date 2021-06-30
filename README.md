@@ -6,6 +6,11 @@ Only unencrypted RAOP service (Airport Express) is implemented now.
 
 Install [pyatv](https://github.com/postlund/pyatv) and execute: `atvremote -n test stream_file=<filename>`
 
+# Log
+
+Print all logs without raw mdns packet
+`RUST_LOG="ras,ras::mdns=debug"`
+
 # References
 
 - https://openairplay.github.io/airplay-spec/introduction.html
