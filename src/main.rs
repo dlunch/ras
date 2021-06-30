@@ -4,7 +4,7 @@ mod raop_session;
 mod rtsp;
 mod sink;
 
-use std::{error::Error, future::Future, sync::Arc};
+use std::{future::Future, sync::Arc};
 
 use async_std::{
     io,
@@ -18,17 +18,12 @@ use log::debug;
 use mac_address::get_mac_address;
 
 #[async_std::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() {
     pretty_env_logger::init();
 
     let matches = App::new("ras").arg(Arg::with_name("server_name").default_value("ras")).get_matches();
 
-    let mac_address = get_mac_address()?;
-    let mac_address = if let Some(x) = mac_address {
-        x.to_string()
-    } else {
-        "000000000000".into()
-    };
+    let mac_address = get_mac_address().unwrap().unwrap().to_string();
     debug!("Mac address: {}", mac_address);
 
     let server_name = matches.value_of("server_name").unwrap().to_owned();
@@ -74,8 +69,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     });
 
     join!(raop_join_handle, mdns_join_handle);
-
-    Ok(())
 }
 
 pub async fn serve<F>(ip: IpAddr, port: u16, handler: impl Fn(u32, TcpStream) -> F) -> io::Result<()>
