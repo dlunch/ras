@@ -168,11 +168,11 @@ impl Server {
                 if x.netmask == Ipv4Addr::new(0, 0, 0, 0) {
                     continue;
                 }
-                let cidr = Ipv4Cidr::from_prefix_and_mask(x.ip, x.netmask).unwrap();
-
-                if cidr.contains(remote_addr) {
-                    trace!("remote_addr: {:?}, interface ip: {:?}, mask: {:?}", remote_addr, x.ip, x.netmask);
-                    return Some(x.ip);
+                if let Ok(cidr) = Ipv4Cidr::from_prefix_and_mask(x.ip, x.netmask) {
+                    if cidr.contains(remote_addr) {
+                        trace!("remote_addr: {:?}, interface ip: {:?}, mask: {:?}", remote_addr, x.ip, x.netmask);
+                        return Some(x.ip);
+                    }
                 }
             }
         }
