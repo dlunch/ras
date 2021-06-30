@@ -29,6 +29,11 @@ impl Server {
         debug!("hostname: {}", hostname);
 
         let interfaces = get_if_addrs()?;
+        for interface in &interfaces {
+            if let IfAddr::V4(x) = &interface.addr {
+                debug!("Interface {} {}", x.ip, x.netmask);
+            }
+        }
 
         Ok(Self {
             services,
