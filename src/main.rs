@@ -21,15 +21,24 @@ use mac_address::get_mac_address;
 async fn main() {
     pretty_env_logger::init();
 
-    let matches = App::new("ras").arg(Arg::with_name("server_name").default_value("ras")).get_matches();
+    let matches = App::new("ras")
+        .arg(Arg::with_name("server_name").default_value("ras"))
+        .arg(Arg::with_name("audio_sink").default_value("dummy").possible_values(&[
+            #[cfg(all(unix, not(target_os = "macos")))]
+            "pulseaudio",
+            "dummy",
+        ]))
+        .get_matches();
+
+    let server_name = matches.value_of("server_name").unwrap().to_owned();
+    let audio_sink = matches.value_of("audio_sink").unwrap();
+
+    debug!("{:?}", matches);
 
     let mac_address = get_mac_address().unwrap().unwrap().to_string();
     debug!("Mac address: {}", mac_address);
 
-    let server_name = matches.value_of("server_name").unwrap().to_owned();
-    debug!("Server name: {}", server_name);
-
-    let audio_sink: Arc<Box<dyn sink::AudioSink>> = Arc::new(sink::create_default_audio_sink());
+    let audio_sink: Arc<Box<dyn sink::AudioSink>> = Arc::new(sink::create(audio_sink));
 
     let raop_join_handle = spawn(async move {
         serve(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 7000, |id, stream| {
