@@ -12,6 +12,7 @@ use async_std::{
     stream::StreamExt,
     task::spawn,
 };
+use clap::{App, Arg};
 use futures::join;
 use log::debug;
 use mac_address::get_mac_address;
@@ -19,6 +20,8 @@ use mac_address::get_mac_address;
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     pretty_env_logger::init();
+
+    let matches = App::new("ras").arg(Arg::with_name("server_name").default_value("ras")).get_matches();
 
     let mac_address = get_mac_address()?;
     let mac_address = if let Some(x) = mac_address {
@@ -28,7 +31,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     };
     debug!("Mac address: {}", mac_address);
 
-    let server_name = "test";
+    let server_name = matches.value_of("server_name").unwrap().to_owned();
+    debug!("Server name: {}", server_name);
 
     let audio_sink: Arc<Box<dyn sink::AudioSink>> = Arc::new(sink::create_default_audio_sink());
 
