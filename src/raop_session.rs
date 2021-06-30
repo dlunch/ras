@@ -69,6 +69,7 @@ impl RaopSession {
             "ANNOUNCE" => self.announce(request).await?,
             "RECORD" => (StatusCode::Ok, HashMap::new()),
             "SETUP" => self.setup(request).await?,
+            "OPTIONS" => self.options(request).await?,
             _ => {
                 warn!("Unhandled method {}", request.method);
 
@@ -79,6 +80,15 @@ impl RaopSession {
         header.insert("CSeq", cseq.into());
 
         Ok(Response::new(status, header))
+    }
+
+    async fn options(&mut self, _: &Request) -> io::Result<(StatusCode, HashMap<&'static str, String>)> {
+        Ok((
+            StatusCode::Ok,
+            hashmap! {
+                "Public" => "ANNOUNCE, SETUP, RECORD, PAUSE, FLUSH, TEARDOWN, OPTIONS, GET_PARAMETER, SET_PARAMETER, POST, GET".into()
+            },
+        ))
     }
 
     async fn announce(&mut self, request: &Request) -> io::Result<(StatusCode, HashMap<&'static str, String>)> {
