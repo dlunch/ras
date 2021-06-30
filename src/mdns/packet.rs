@@ -7,7 +7,7 @@ use std::{
 };
 
 use bitflags::bitflags;
-use log::debug;
+use log::trace;
 
 struct ReadStream<'a> {
     buffer: &'a [u8],
@@ -222,7 +222,7 @@ impl ResourceType {
             28 => Self::AAAA,
             33 => Self::SRV,
             x => {
-                debug!("Unknown resourcetype {}", x);
+                trace!("Unknown resourcetype {}", x);
 
                 Self::Unknown(x)
             }
