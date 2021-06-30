@@ -4,7 +4,7 @@ mod raop_session;
 mod rtsp;
 mod sink;
 
-use std::{future::Future, sync::Arc};
+use std::{error::Error, future::Future, sync::Arc};
 
 use async_std::{
     io,
@@ -13,10 +13,22 @@ use async_std::{
     task::spawn,
 };
 use futures::join;
+use log::debug;
+use mac_address::get_mac_address;
 
 #[async_std::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn Error>> {
     pretty_env_logger::init();
+
+    let mac_address = get_mac_address()?;
+    let mac_address = if let Some(x) = mac_address {
+        x.to_string()
+    } else {
+        "000000000000".into()
+    };
+    debug!("Mac address: {}", mac_address);
+
+    let server_name = "test";
 
     let audio_sink: Arc<Box<dyn sink::AudioSink>> = Arc::new(sink::create_default_audio_sink());
 
@@ -28,10 +40,10 @@ async fn main() {
         .unwrap();
     });
 
-    let mdns_join_handle = spawn(async {
+    let mdns_join_handle = spawn(async move {
         let service = mdns::Service::new(
             "_raop._tcp",
-            "000000000000@test",
+            &format!("{}@{}", mac_address.replace(":", ""), server_name),
             7000,
             vec![
                 "sf=0x4",
@@ -58,6 +70,8 @@ async fn main() {
     });
 
     join!(raop_join_handle, mdns_join_handle);
+
+    Ok(())
 }
 
 pub async fn serve<F>(ip: IpAddr, port: u16, handler: impl Fn(u32, TcpStream) -> F) -> io::Result<()>
