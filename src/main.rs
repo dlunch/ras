@@ -49,7 +49,7 @@ async fn main() {
                 "fv=76400.10",
                 "am=ras",
                 "vs=105.1",
-                "tp=TCP,UDP",
+                "tp=UDP",
                 "vn=65537",
                 "md=0,1,2",
                 "ss=16",
