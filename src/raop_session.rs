@@ -78,6 +78,7 @@ impl RaopSession {
         };
 
         header.insert("CSeq", cseq.into());
+        header.insert("Server", "ras/0.1".into());
 
         Ok(Response::new(status, header))
     }
