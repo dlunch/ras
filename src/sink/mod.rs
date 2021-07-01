@@ -1,9 +1,8 @@
 mod dummy;
+mod rodio;
 
-#[allow(dead_code)]
 pub enum AudioFormat {
     S16NE,
-    S32NE,
 }
 
 pub trait AudioSink: Send + Sync {
@@ -25,6 +24,7 @@ pub fn create(sink: &str) -> Box<dyn AudioSink> {
         #[cfg(all(unix, not(target_os = "macos")))]
         "pulseaudio" => Box::new(pulseaudio::PulseAudioSink::new()),
         "dummy" => Box::new(dummy::DummyAudioSink::new()),
+        "rodio" => Box::new(rodio::RodioAudioSink::new()),
         _ => panic!("Unknown sink"),
     }
 }

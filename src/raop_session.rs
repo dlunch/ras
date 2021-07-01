@@ -11,7 +11,7 @@ use rtp_rs::RtpReader;
 use super::{
     decoder::{AppleLoselessDecoder, Decoder},
     rtsp::{Request, Response, StatusCode},
-    sink::{AudioFormat, AudioSink},
+    sink::AudioSink,
 };
 
 pub struct RaopSession {
@@ -150,15 +150,13 @@ impl RaopSession {
     }
 
     async fn rtp_loop(socket: UdpSocket, rtp_type: u8, mut decoder: Box<dyn Decoder>, sink: Arc<Box<dyn AudioSink>>) -> io::Result<()> {
-        let session = sink.start(decoder.channels(), decoder.rate(), AudioFormat::S32NE);
+        let session = sink.start(decoder.channels(), decoder.rate(), decoder.format());
 
         loop {
             let mut buf = [0; 2048];
             let len = socket.recv(&mut buf).await?;
 
             let rtp = RtpReader::new(&buf[..len]).map_err(|x| io::Error::new(io::ErrorKind::Other, format!("{:?}", x)))?;
-
-            trace!("RTP type {} seq {:?}", rtp.payload_type(), rtp.sequence_number());
 
             if rtp.payload_type() == rtp_type {
                 let decoded_content = decoder.decode(rtp.payload());
