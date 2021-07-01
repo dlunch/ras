@@ -23,8 +23,8 @@ async fn main() {
     pretty_env_logger::init();
 
     let matches = App::new("ras")
-        .arg(Arg::with_name("server_name").default_value("ras"))
-        .arg(Arg::with_name("audio_sink").default_value("rodio").possible_values(&[
+        .arg(Arg::with_name("server_name").long("server_name").default_value("ras"))
+        .arg(Arg::with_name("audio_sink").long("audio_sink").default_value("rodio").possible_values(&[
             "rodio",
             #[cfg(all(unix, not(target_os = "macos")))]
             "pulseaudio",
