@@ -26,7 +26,7 @@ pub struct RodioAudioSinkSession {
     channels: u16,
     rate: u32,
     format: AudioFormat,
-    sender: SyncSender<SamplesBuffer<u16>>,
+    sender: SyncSender<SamplesBuffer<i16>>,
 }
 
 impl RodioAudioSinkSession {
