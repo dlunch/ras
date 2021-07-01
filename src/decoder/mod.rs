@@ -1,6 +1,6 @@
 use alac::{Decoder as AlacDecoder, StreamInfo};
 
-use crate::sink::AudioFormat;
+use crate::{sink::AudioFormat, util::convert_vec};
 
 pub trait Decoder: Send {
     fn channels(&self) -> u8;
@@ -32,23 +32,13 @@ impl Decoder for AppleLoselessDecoder {
     }
 
     fn format(&self) -> AudioFormat {
-        AudioFormat::S32NE
+        AudioFormat::S16NE
     }
 
     fn decode(&mut self, raw: &[u8]) -> Vec<u8> {
-        let mut out = vec![0; self.decoder.stream_info().max_samples_per_packet() as usize];
+        let mut out = vec![0i16; self.decoder.stream_info().max_samples_per_packet() as usize];
         self.decoder.decode_packet(raw, &mut out, true).unwrap();
 
-        unsafe {
-            let ratio = std::mem::size_of::<u32>() / std::mem::size_of::<u8>();
-
-            let length = out.len() * ratio;
-            let capacity = out.capacity() * ratio;
-            let ptr = out.as_mut_ptr() as *mut u8;
-
-            std::mem::forget(out);
-
-            Vec::from_raw_parts(ptr, length, capacity)
-        }
+        unsafe { convert_vec(out) }
     }
 }

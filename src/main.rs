@@ -3,6 +3,7 @@ mod mdns;
 mod raop_session;
 mod rtsp;
 mod sink;
+mod util;
 
 use std::{future::Future, sync::Arc};
 
@@ -23,7 +24,8 @@ async fn main() {
 
     let matches = App::new("ras")
         .arg(Arg::with_name("server_name").default_value("ras"))
-        .arg(Arg::with_name("audio_sink").default_value("dummy").possible_values(&[
+        .arg(Arg::with_name("audio_sink").default_value("rodio").possible_values(&[
+            "rodio",
             #[cfg(all(unix, not(target_os = "macos")))]
             "pulseaudio",
             "dummy",
