@@ -1,13 +1,13 @@
 use std::{
     io,
-    net::{Ipv4Addr, SocketAddrV4},
+    net::{IpAddr, Ipv4Addr, SocketAddrV4},
     sync::Arc,
     time::Duration,
 };
 
 use async_std::{net::UdpSocket, task::spawn_blocking};
 use cidr_utils::cidr::Ipv4Cidr;
-use get_if_addrs::{get_if_addrs, IfAddr, Interface};
+use ipconfig::{self, Adapter};
 use log::{debug, trace};
 use multicast_socket::{all_ipv4_interfaces, Message, MulticastOptions, MulticastSocket};
 
@@ -17,7 +17,7 @@ use super::Service;
 pub struct Server {
     services: Vec<Service>,
     hostname: String,
-    interfaces: Vec<Interface>,
+    adapters: Vec<Adapter>,
 }
 
 impl Server {
@@ -28,17 +28,17 @@ impl Server {
         }
         debug!("hostname: {}", hostname);
 
-        let interfaces = get_if_addrs()?;
-        for interface in &interfaces {
-            if let IfAddr::V4(x) = &interface.addr {
-                debug!("Interface {} {}", x.ip, x.netmask);
+        let adapters = ipconfig::get_adapters().unwrap();
+        for adapter in &adapters {
+            for prefix in adapter.prefixes() {
+                debug!("ip {:?}/{}", prefix.0, prefix.1);
             }
         }
 
         Ok(Self {
             services,
             hostname,
-            interfaces,
+            adapters,
         })
     }
 
@@ -130,7 +130,7 @@ impl Server {
     fn create_response(&self, service: &Service, remote_addr: &Ipv4Addr) -> (Vec<ResourceRecord>, Vec<ResourceRecord>) {
         debug!("Creating response for {}", service.name);
 
-        let ip = self.find_interface_ip(remote_addr).unwrap();
+        let ip = self.find_local_ip(remote_addr).unwrap();
 
         // PTR answer
         let answers = vec![ResourceRecord::new(
@@ -162,16 +162,14 @@ impl Server {
         (answers, additionals)
     }
 
-    fn find_interface_ip(&self, remote_addr: &Ipv4Addr) -> Option<Ipv4Addr> {
-        for interface in &self.interfaces {
-            if let IfAddr::V4(x) = &interface.addr {
-                if x.netmask == Ipv4Addr::new(0, 0, 0, 0) {
-                    continue;
-                }
-                if let Ok(cidr) = Ipv4Cidr::from_prefix_and_mask(x.ip, x.netmask) {
+    fn find_local_ip(&self, remote_addr: &Ipv4Addr) -> Option<Ipv4Addr> {
+        for adapter in &self.adapters {
+            for prefix in adapter.prefixes() {
+                if let IpAddr::V4(x) = prefix.0 {
+                    let cidr = Ipv4Cidr::from_prefix_and_bits(x, prefix.1 as u8).unwrap();
                     if cidr.contains(remote_addr) {
-                        trace!("remote_addr: {:?}, interface ip: {:?}, mask: {:?}", remote_addr, x.ip, x.netmask);
-                        return Some(x.ip);
+                        debug!("remote_addr: {:?}, interface ip: {:?}/{}", remote_addr, x, prefix.1);
+                        return Some(x);
                     }
                 }
             }
