@@ -7,7 +7,6 @@ use std::{
 
 use async_std::{net::UdpSocket, task::spawn_blocking};
 use cidr_utils::cidr::Ipv4Cidr;
-use ipconfig::{self, Adapter};
 use log::{debug, trace};
 use multicast_socket::{all_ipv4_interfaces, Message, MulticastOptions, MulticastSocket};
 
@@ -17,7 +16,8 @@ use super::Service;
 pub struct Server {
     services: Vec<Service>,
     hostname: String,
-    adapters: Vec<Adapter>,
+    // consider only ipv4 for now
+    prefixes: Vec<(Ipv4Addr, Ipv4Cidr)>,
 }
 
 impl Server {
@@ -28,17 +28,55 @@ impl Server {
         }
         debug!("hostname: {}", hostname);
 
-        let adapters = ipconfig::get_adapters().unwrap();
-        for adapter in &adapters {
-            for prefix in adapter.prefixes() {
-                debug!("ip {:?}/{}", prefix.0, prefix.1);
-            }
+        #[cfg(windows)]
+        let prefixes = ipconfig::get_adapters()
+            .unwrap()
+            .into_iter()
+            .flat_map(|adapter| {
+                adapter
+                    .prefixes()
+                    .iter()
+                    .filter_map(|prefix| {
+                        // returns ipv4 {adapter_address}/{mask} cidr
+                        if let IpAddr::V4(prefix_addr) = prefix.0 {
+                            let cidr = Ipv4Cidr::from_prefix_and_bits(prefix_addr, prefix.1 as u8).unwrap();
+                            for address in adapter.ip_addresses() {
+                                if let IpAddr::V4(adapter_addr) = address {
+                                    if cidr.contains(adapter_addr) && prefix.1 != 32 && prefix.1 != 0 {
+                                        return Some((*adapter_addr, Ipv4Cidr::from_prefix_and_bits(prefix_addr, prefix.1 as u8).unwrap()));
+                                    }
+                                }
+                            }
+                        }
+                        None
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+
+        #[cfg(unix)]
+        let prefix = get_if_addrs::get_if_addrs()?
+            .into_iter()
+            .filter_map(|if_addr| {
+                use get_if_addrs::IfAddr;
+                if let IfAddr::V4(addr) = if_addr.addr {
+                    if addr.netmask != Ipv4Addr::new(0, 0, 0, 0) && addr.netmask != Ipv4Addr::new(255, 255, 255, 255) {
+                        return Some(Ipv4Cidr::from_prefix_and_mask(addr.ip, addr.netmask).unwrap());
+                    }
+                }
+
+                None
+            })
+            .collect::<Vec<_>>();
+
+        for prefix in &prefixes {
+            debug!("ip {:?}/{}", prefix.0, prefix.1.get_bits());
         }
 
         Ok(Self {
             services,
             hostname,
-            adapters,
+            prefixes,
         })
     }
 
@@ -163,15 +201,10 @@ impl Server {
     }
 
     fn find_local_ip(&self, remote_addr: &Ipv4Addr) -> Option<Ipv4Addr> {
-        for adapter in &self.adapters {
-            for prefix in adapter.prefixes() {
-                if let IpAddr::V4(x) = prefix.0 {
-                    let cidr = Ipv4Cidr::from_prefix_and_bits(x, prefix.1 as u8).unwrap();
-                    if cidr.contains(remote_addr) {
-                        debug!("remote_addr: {:?}, interface ip: {:?}/{}", remote_addr, x, prefix.1);
-                        return Some(x);
-                    }
-                }
+        for prefix in &self.prefixes {
+            if prefix.1.contains(remote_addr) {
+                debug!("remote_addr: {:?}, interface ip: {:?}/{}", remote_addr, prefix.0, prefix.1.get_bits());
+                return Some(prefix.0);
             }
         }
 
