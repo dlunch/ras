@@ -55,7 +55,7 @@ impl Server {
             .collect::<Vec<_>>();
 
         #[cfg(unix)]
-        let prefix = get_if_addrs::get_if_addrs()?
+        let prefixes = get_if_addrs::get_if_addrs()?
             .into_iter()
             .filter_map(|if_addr| {
                 use get_if_addrs::IfAddr;
