@@ -7,6 +7,7 @@ use async_std::io::{self, prelude::WriteExt};
 pub enum StatusCode {
     Ok = 200,
     NotFound = 404,
+    MethodNotAllowed = 405,
 }
 
 impl StatusCode {
@@ -14,6 +15,7 @@ impl StatusCode {
         match self {
             StatusCode::Ok => "OK",
             StatusCode::NotFound => "Not Found",
+            StatusCode::MethodNotAllowed => "Method Not Allowed",
         }
     }
 }
