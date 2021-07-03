@@ -66,10 +66,10 @@ impl RaopSession {
         let (status, mut header) = match request.method.as_str() {
             "GET" => (StatusCode::NotFound, HashMap::new()),
             "POST" => (StatusCode::NotFound, HashMap::new()),
-            "ANNOUNCE" => self.announce(request).await?,
+            "ANNOUNCE" => self.handle_announce(request).await?,
             "RECORD" => (StatusCode::Ok, HashMap::new()),
-            "SETUP" => self.setup(request).await?,
-            "OPTIONS" => self.options(request).await?,
+            "SETUP" => self.handle_setup(request).await?,
+            "OPTIONS" => self.handle_options(request).await?,
             _ => {
                 warn!("Unhandled method {}", request.method);
 
@@ -83,7 +83,7 @@ impl RaopSession {
         Ok(Response::new(status, header))
     }
 
-    async fn options(&mut self, _: &Request) -> io::Result<(StatusCode, HashMap<&'static str, String>)> {
+    async fn handle_options(&mut self, _: &Request) -> io::Result<(StatusCode, HashMap<&'static str, String>)> {
         Ok((
             StatusCode::Ok,
             hashmap! {
@@ -92,7 +92,7 @@ impl RaopSession {
         ))
     }
 
-    async fn announce(&mut self, request: &Request) -> io::Result<(StatusCode, HashMap<&'static str, String>)> {
+    async fn handle_announce(&mut self, request: &Request) -> io::Result<(StatusCode, HashMap<&'static str, String>)> {
         let mut codec = None;
         let mut fmtp = None;
         for line in str::from_utf8(&request.content).unwrap().lines() {
@@ -120,7 +120,7 @@ impl RaopSession {
         Ok((StatusCode::Ok, HashMap::new()))
     }
 
-    async fn setup(&mut self, request: &Request) -> io::Result<(StatusCode, HashMap<&'static str, String>)> {
+    async fn handle_setup(&mut self, request: &Request) -> io::Result<(StatusCode, HashMap<&'static str, String>)> {
         let client_transport = request.headers.get("Transport").unwrap();
 
         debug!("client_transport: {:?}", client_transport);
