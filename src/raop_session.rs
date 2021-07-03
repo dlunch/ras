@@ -78,7 +78,7 @@ impl RaopSession {
             _ => {
                 warn!("Unhandled method {}", request.method);
 
-                (StatusCode::Ok, HashMap::new())
+                (StatusCode::MethodNotAllowed, HashMap::new())
             }
         };
 
