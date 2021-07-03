@@ -1,6 +1,6 @@
 use std::{
     io,
-    net::{IpAddr, Ipv4Addr, SocketAddrV4},
+    net::{Ipv4Addr, SocketAddrV4},
     sync::Arc,
     time::Duration,
 };
@@ -37,6 +37,8 @@ impl Server {
                     .prefixes()
                     .iter()
                     .filter_map(|prefix| {
+                        use std::net::IpAddr;
+
                         // returns ipv4 {adapter_address}/{mask} cidr
                         if let IpAddr::V4(prefix_addr) = prefix.0 {
                             let cidr = Ipv4Cidr::from_prefix_and_bits(prefix_addr, prefix.1 as u8).unwrap();
