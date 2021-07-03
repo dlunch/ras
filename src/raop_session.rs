@@ -64,12 +64,17 @@ impl RaopSession {
         let cseq = request.headers.get("CSeq").unwrap();
 
         let (status, mut header) = match request.method.as_str() {
-            "GET" => (StatusCode::NotFound, HashMap::new()),
-            "POST" => (StatusCode::NotFound, HashMap::new()),
             "ANNOUNCE" => self.handle_announce(request).await?,
-            "RECORD" => (StatusCode::Ok, HashMap::new()),
             "SETUP" => self.handle_setup(request).await?,
+            "RECORD" => (StatusCode::Ok, HashMap::new()),
+            "PAUSE" => (StatusCode::Ok, HashMap::new()),
+            "FLUSH" => (StatusCode::Ok, HashMap::new()),
+            "TEARDOWN" => (StatusCode::Ok, HashMap::new()),
             "OPTIONS" => self.handle_options(request).await?,
+            "GET_PARAMETER" => (StatusCode::Ok, HashMap::new()),
+            "SET_PARAMETER" => (StatusCode::Ok, HashMap::new()),
+            "POST" => (StatusCode::NotFound, HashMap::new()),
+            "GET" => (StatusCode::NotFound, HashMap::new()),
             _ => {
                 warn!("Unhandled method {}", request.method);
 
