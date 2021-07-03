@@ -38,9 +38,7 @@ impl RodioAudioSinkSession {
             let (_stream, stream_handle) = OutputStream::try_default().unwrap();
             let sink = Sink::try_new(&stream_handle).unwrap();
 
-            loop {
-                let buffer = receiver.recv().unwrap();
-
+            while let Ok(buffer) = receiver.recv() {
                 sink.append(buffer);
             }
         });
