@@ -61,7 +61,7 @@ impl Server {
                 use get_if_addrs::IfAddr;
                 if let IfAddr::V4(addr) = if_addr.addr {
                     if addr.netmask != Ipv4Addr::new(0, 0, 0, 0) && addr.netmask != Ipv4Addr::new(255, 255, 255, 255) {
-                        return Some(Ipv4Cidr::from_prefix_and_mask(addr.ip, addr.netmask).unwrap());
+                        return Some((addr.ip, Ipv4Cidr::from_prefix_and_mask(addr.ip, addr.netmask).unwrap()));
                     }
                 }
 
