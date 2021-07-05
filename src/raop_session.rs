@@ -1,5 +1,6 @@
-use std::{collections::HashMap, io, str, sync::Arc};
+use std::{collections::HashMap, str, sync::Arc};
 
+use anyhow::Result;
 use async_std::{
     net::{Ipv4Addr, SocketAddrV4, TcpStream, UdpSocket},
     task,
@@ -23,7 +24,7 @@ pub struct RaopSession {
 }
 
 impl RaopSession {
-    pub async fn start(id: u32, stream: TcpStream, sink: Arc<Box<dyn AudioSink>>) -> io::Result<()> {
+    pub async fn start(id: u32, stream: TcpStream, sink: Arc<Box<dyn AudioSink>>) -> Result<()> {
         let mut session = Self {
             id,
             stream,
@@ -35,7 +36,7 @@ impl RaopSession {
         session.rtsp_loop().await
     }
 
-    async fn rtsp_loop(&mut self) -> io::Result<()> {
+    async fn rtsp_loop(&mut self) -> Result<()> {
         loop {
             let req = Request::parse(&mut self.stream).await?;
             if req.is_none() {
@@ -60,7 +61,7 @@ impl RaopSession {
         Ok(())
     }
 
-    async fn handle_request(&mut self, request: &Request) -> io::Result<Response> {
+    async fn handle_request(&mut self, request: &Request) -> Result<Response> {
         let cseq = request.headers.get("CSeq").unwrap();
 
         let (status, mut header) = match request.method.as_str() {
@@ -88,7 +89,7 @@ impl RaopSession {
         Ok(Response::new(status, header))
     }
 
-    async fn handle_options(&mut self, _: &Request) -> io::Result<(StatusCode, HashMap<&'static str, String>)> {
+    async fn handle_options(&mut self, _: &Request) -> Result<(StatusCode, HashMap<&'static str, String>)> {
         Ok((
             StatusCode::Ok,
             hashmap! {
@@ -97,7 +98,7 @@ impl RaopSession {
         ))
     }
 
-    async fn handle_announce(&mut self, request: &Request) -> io::Result<(StatusCode, HashMap<&'static str, String>)> {
+    async fn handle_announce(&mut self, request: &Request) -> Result<(StatusCode, HashMap<&'static str, String>)> {
         let mut codec = None;
         let mut fmtp = None;
         for line in str::from_utf8(&request.content).unwrap().lines() {
@@ -125,7 +126,7 @@ impl RaopSession {
         Ok((StatusCode::Ok, HashMap::new()))
     }
 
-    async fn handle_setup(&mut self, request: &Request) -> io::Result<(StatusCode, HashMap<&'static str, String>)> {
+    async fn handle_setup(&mut self, request: &Request) -> Result<(StatusCode, HashMap<&'static str, String>)> {
         let client_transport = request.headers.get("Transport").unwrap();
 
         debug!("client_transport: {:?}", client_transport);
@@ -154,14 +155,14 @@ impl RaopSession {
         Ok((StatusCode::Ok, response_headers))
     }
 
-    async fn rtp_loop(socket: UdpSocket, rtp_type: u8, mut decoder: Box<dyn Decoder>, sink: Arc<Box<dyn AudioSink>>) -> io::Result<()> {
+    async fn rtp_loop(socket: UdpSocket, rtp_type: u8, mut decoder: Box<dyn Decoder>, sink: Arc<Box<dyn AudioSink>>) -> Result<()> {
         let session = sink.start(decoder.channels(), decoder.rate(), decoder.format());
 
         loop {
             let mut buf = [0; 2048];
             let len = socket.recv(&mut buf).await?;
 
-            let rtp = RtpReader::new(&buf[..len]).map_err(|x| io::Error::new(io::ErrorKind::Other, format!("{:?}", x)))?;
+            let rtp = RtpReader::new(&buf[..len]).map_err(|x| anyhow::Error::msg(format!("Can't read rtp packet {:?}", x)))?;
 
             if rtp.payload_type() == rtp_type {
                 let decoded_content = decoder.decode(rtp.payload());

@@ -7,8 +7,8 @@ mod util;
 
 use std::{future::Future, sync::Arc};
 
+use anyhow::Result;
 use async_std::{
-    io,
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener, TcpStream},
     stream::StreamExt,
     task::spawn,
@@ -82,9 +82,9 @@ async fn main() {
     join!(raop_join_handle, mdns_join_handle);
 }
 
-pub async fn serve<F>(ip: IpAddr, port: u16, handler: impl Fn(u32, TcpStream) -> F) -> io::Result<()>
+pub async fn serve<F>(ip: IpAddr, port: u16, handler: impl Fn(u32, TcpStream) -> F) -> Result<()>
 where
-    F: Future<Output = io::Result<()>> + Send + 'static,
+    F: Future<Output = Result<()>> + Send + 'static,
 {
     let listener = TcpListener::bind(SocketAddr::new(ip, port)).await?;
     let mut incoming = listener.incoming();
