@@ -5,6 +5,7 @@ use std::{
     time::Duration,
 };
 
+use anyhow::Result;
 use async_std::{net::UdpSocket, task::spawn_blocking};
 use cidr_utils::cidr::Ipv4Cidr;
 use log::{debug, trace};
@@ -21,7 +22,7 @@ pub struct Server {
 }
 
 impl Server {
-    pub fn new(services: Vec<Service>) -> io::Result<Self> {
+    pub fn new(services: Vec<Service>) -> Result<Self> {
         let mut hostname = hostname::get()?.into_string().unwrap();
         if !hostname.ends_with(".local") {
             hostname = format!("{}.local", hostname);
@@ -82,7 +83,7 @@ impl Server {
         })
     }
 
-    pub async fn serve(&self) -> io::Result<()> {
+    pub async fn serve(&self) -> Result<()> {
         let mdns_addr = Ipv4Addr::new(224, 0, 0, 251);
 
         let interfaces = all_ipv4_interfaces()?;
