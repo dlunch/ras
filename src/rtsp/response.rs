@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use async_std::io::{self, prelude::WriteExt};
 
 #[derive(Clone, Copy)]
-#[allow(dead_code)]
 pub enum StatusCode {
     Ok = 200,
     NotFound = 404,
@@ -52,17 +51,20 @@ impl Response {
 #[cfg(test)]
 mod test {
     use super::*;
+    use anyhow::Result;
     use maplit::hashmap;
     use std::str;
 
     #[async_std::test]
-    async fn test_simple_response() {
+    async fn test_simple_response() -> Result<()> {
         let response = Response::new(StatusCode::Ok, hashmap! { "Test" => "Test".into() });
 
         let mut buf = Vec::new();
-        response.write(&mut buf).await.unwrap();
+        response.write(&mut buf).await?;
 
-        let response_text = str::from_utf8(&buf).unwrap();
+        let response_text = str::from_utf8(&buf)?;
         assert_eq!(response_text, "RTSP/1.0 200 OK\r\nTest: Test\r\n\r\n");
+
+        Ok(())
     }
 }

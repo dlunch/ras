@@ -1,16 +1,18 @@
 mod dummy;
 mod rodio;
 
+use anyhow::Result;
+
 pub enum AudioFormat {
     S16NE,
 }
 
 pub trait AudioSink: Send + Sync {
-    fn start(&self, channels: u8, rate: u32, format: AudioFormat) -> Box<dyn AudioSinkSession>;
+    fn start(&self, channels: u8, rate: u32, format: AudioFormat) -> Result<Box<dyn AudioSinkSession>>;
 }
 
 pub trait AudioSinkSession: Send + Sync {
-    fn write(&self, payload: &[u8]);
+    fn write(&self, payload: &[u8]) -> Result<()>;
 }
 
 cfg_if::cfg_if! {

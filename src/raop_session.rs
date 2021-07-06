@@ -39,26 +39,13 @@ impl RaopSession {
     async fn rtsp_loop(&mut self) -> Result<()> {
         loop {
             let req = Request::parse(&mut self.stream).await?;
-            if req.is_none() {
-                break;
-            }
-            let req = req.unwrap();
-
-            trace!(
-                "req {} {} {:?} {:?}",
-                req.method,
-                req.path,
-                req.headers,
-                str::from_utf8(&req.content).unwrap()
-            );
+            trace!("req {} {} {:?} {:?}", req.method, req.path, req.headers, str::from_utf8(&req.content)?);
 
             let res = self.handle_request(&req).await?;
             trace!("res {} {:?}", res.status as u32, res.headers);
 
             res.write(&mut self.stream).await?;
         }
-
-        Ok(())
     }
 
     async fn handle_request(&mut self, request: &Request) -> Result<Response> {
@@ -101,14 +88,14 @@ impl RaopSession {
     async fn handle_announce(&mut self, request: &Request) -> Result<(StatusCode, HashMap<&'static str, String>)> {
         let mut codec = None;
         let mut fmtp = None;
-        for line in str::from_utf8(&request.content).unwrap().lines() {
+        for line in str::from_utf8(&request.content)?.lines() {
             if line.starts_with("a=rtpmap") {
                 // a=rtpmap:96 AppleLossless
 
                 let content = &line["a=rtpmap".len() + 1..];
                 let mut split = content.split(' ');
 
-                self.rtp_type = Some(split.next().unwrap().parse().unwrap());
+                self.rtp_type = Some(split.next().unwrap().parse()?);
                 codec = Some(split.next().unwrap());
             } else if line.starts_with("a=fmtp") {
                 // a=fmtp:96 352 0 16 40 10 14 2 255 0 0 44100
@@ -119,7 +106,7 @@ impl RaopSession {
         debug!("codec: {:?}, fmtp: {:?}", codec, fmtp);
 
         match codec.unwrap() {
-            "AppleLossless" => self.decoder = Some(Box::new(AppleLoselessDecoder::new(fmtp.unwrap()))),
+            "AppleLossless" => self.decoder = Some(Box::new(AppleLoselessDecoder::new(fmtp.unwrap())?)),
             unk => panic!("Unknown codec {:?}", unk),
         }
 
@@ -150,13 +137,13 @@ impl RaopSession {
         let rtp_type = self.rtp_type.take().unwrap();
         let decoder = self.decoder.take().unwrap();
         let sink = self.sink.clone();
-        task::spawn(async move { Self::rtp_loop(rtp, rtp_type, decoder, sink).await.unwrap() });
+        task::spawn(async move { Self::rtp_loop(rtp, rtp_type, decoder, sink).await });
 
         Ok((StatusCode::Ok, response_headers))
     }
 
     async fn rtp_loop(socket: UdpSocket, rtp_type: u8, mut decoder: Box<dyn Decoder>, sink: Arc<Box<dyn AudioSink>>) -> Result<()> {
-        let session = sink.start(decoder.channels(), decoder.rate(), decoder.format());
+        let session = sink.start(decoder.channels(), decoder.rate(), decoder.format())?;
 
         loop {
             let mut buf = [0; 2048];
@@ -165,8 +152,8 @@ impl RaopSession {
             let rtp = RtpReader::new(&buf[..len]).map_err(|x| anyhow::Error::msg(format!("Can't read rtp packet {:?}", x)))?;
 
             if rtp.payload_type() == rtp_type {
-                let decoded_content = decoder.decode(rtp.payload());
-                session.write(&decoded_content);
+                let decoded_content = decoder.decode(rtp.payload())?;
+                session.write(&decoded_content)?;
             }
         }
     }

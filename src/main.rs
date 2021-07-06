@@ -14,12 +14,12 @@ use async_std::{
     task::spawn,
 };
 use clap::{App, Arg};
-use futures::join;
+use futures::future::try_join_all;
 use log::debug;
 use mac_address::get_mac_address;
 
 #[async_std::main]
-async fn main() {
+async fn main() -> Result<()> {
     pretty_env_logger::init();
 
     let matches = App::new("ras")
@@ -37,7 +37,7 @@ async fn main() {
 
     debug!("{:?}", matches);
 
-    let mac_address = get_mac_address().unwrap().unwrap().to_string();
+    let mac_address = get_mac_address()?.unwrap().to_string();
     debug!("Mac address: {}", mac_address);
 
     let audio_sink: Arc<Box<dyn sink::AudioSink>> = Arc::new(sink::create(audio_sink));
@@ -47,7 +47,6 @@ async fn main() {
             raop_session::RaopSession::start(id, stream, audio_sink.clone())
         })
         .await
-        .unwrap();
     });
 
     let mdns_join_handle = spawn(async move {
@@ -75,11 +74,13 @@ async fn main() {
                 "pw=false",
             ],
         );
-        let server = mdns::Server::new(vec![service]).unwrap();
-        server.serve().await.unwrap();
+        let server = mdns::Server::new(vec![service])?;
+        server.serve().await
     });
 
-    join!(raop_join_handle, mdns_join_handle);
+    try_join_all([raop_join_handle, mdns_join_handle]).await?;
+
+    Ok(())
 }
 
 pub async fn serve<F>(ip: IpAddr, port: u16, handler: impl Fn(u32, TcpStream) -> F) -> Result<()>

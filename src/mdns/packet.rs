@@ -6,6 +6,7 @@ use std::{
     str,
 };
 
+use anyhow::{anyhow, Result};
 use bitflags::bitflags;
 use log::trace;
 
@@ -153,7 +154,7 @@ impl Name {
         }
     }
 
-    fn parse(stream: &mut ReadStream) -> Self {
+    fn parse(stream: &mut ReadStream) -> Result<Self> {
         let mut labels = Vec::new();
         loop {
             let length = stream.read_u8() as usize;
@@ -165,18 +166,18 @@ impl Name {
                 let offset = (length << 8 | offset_byte) & !49152;
 
                 let mut new_stream = ReadStream::with_cursor(stream.buffer, offset);
-                let mut result = Name::parse(&mut new_stream);
+                let mut result = Name::parse(&mut new_stream)?;
 
                 labels.append(&mut result.labels);
 
                 break;
             } else {
                 let label = stream.read(length as usize);
-                labels.push(str::from_utf8(label).unwrap().into());
+                labels.push(str::from_utf8(label)?.into());
             }
         }
 
-        Self { labels }
+        Ok(Self { labels })
     }
 
     fn write(&self, stream: &mut WriteStream) {
@@ -271,20 +272,20 @@ pub struct Question {
 }
 
 impl Question {
-    fn parse(mut stream: &mut ReadStream) -> Self {
-        let name = Name::parse(&mut stream);
+    fn parse(mut stream: &mut ReadStream) -> Result<Self> {
+        let name = Name::parse(&mut stream)?;
 
         let r#type = stream.read_u16();
         let class = stream.read_u16();
 
         let unicast = class & 0x8000 != 0;
 
-        Question {
+        Ok(Question {
             name,
             r#type: ResourceType::parse(r#type),
             class: Class::parse(class),
             unicast,
-        }
+        })
     }
 
     fn write(&self, mut stream: &mut WriteStream) {
@@ -306,19 +307,19 @@ pub enum ResourceRecordData {
 }
 
 impl ResourceRecordData {
-    fn parse(r#type: ResourceType, mut stream: &mut ReadStream) -> Self {
+    fn parse(r#type: ResourceType, mut stream: &mut ReadStream) -> Result<Self> {
         let length = stream.read_u16() as usize;
 
-        match r#type {
+        Ok(match r#type {
             ResourceType::A => Self::A(Ipv4Addr::from(stream.read_u32())),
             ResourceType::AAAA => Self::AAAA(Ipv6Addr::from(stream.read_u128())),
-            ResourceType::PTR => Self::PTR(Name::parse(&mut stream)),
+            ResourceType::PTR => Self::PTR(Name::parse(&mut stream)?),
             ResourceType::TXT => {
                 let mut txt = Vec::new();
                 let end = stream.cursor + length;
                 loop {
                     let length = stream.read_u8() as usize;
-                    txt.push(str::from_utf8(stream.read(length)).unwrap().into());
+                    txt.push(str::from_utf8(stream.read(length))?.into());
 
                     if stream.cursor == end {
                         break;
@@ -331,13 +332,13 @@ impl ResourceRecordData {
                 priority: stream.read_u16(),
                 weight: stream.read_u16(),
                 port: stream.read_u16(),
-                target: Name::parse(&mut stream),
+                target: Name::parse(&mut stream)?,
             },
             x => Self::Unknown {
                 r#type: x,
                 data: stream.read(length).into(),
             },
-        }
+        })
     }
 
     fn r#type(&self) -> ResourceType {
@@ -405,16 +406,16 @@ impl ResourceRecord {
         }
     }
 
-    fn parse(mut stream: &mut ReadStream) -> Self {
-        let name = Name::parse(&mut stream);
+    fn parse(mut stream: &mut ReadStream) -> Result<Self> {
+        let name = Name::parse(&mut stream)?;
 
         let r#type = ResourceType::parse(stream.read_u16());
         let class = Class::parse(stream.read_u16());
         let ttl = stream.read_u32();
 
-        let data = ResourceRecordData::parse(r#type, &mut stream);
+        let data = ResourceRecordData::parse(r#type, &mut stream)?;
 
-        ResourceRecord { name, class, ttl, data }
+        Ok(ResourceRecord { name, class, ttl, data })
     }
 
     fn write(&self, mut stream: &mut WriteStream) {
@@ -462,21 +463,27 @@ impl Packet {
         }
     }
 
-    pub fn parse(raw: &[u8]) -> Option<Self> {
+    pub fn parse(raw: &[u8]) -> Result<Self> {
         if raw.len() < size_of::<Header>() {
-            return None;
+            return Err(anyhow!("Buffer too small"));
         }
 
         let mut stream = ReadStream::new(raw);
 
         let header = stream.read_as::<Header>().clone();
 
-        let questions = (0..header.qd_count.get()).map(|_| Question::parse(&mut stream)).collect::<Vec<_>>();
-        let answers = (0..header.an_count.get()).map(|_| ResourceRecord::parse(&mut stream)).collect::<Vec<_>>();
-        let nameservers = (0..header.ns_count.get()).map(|_| ResourceRecord::parse(&mut stream)).collect::<Vec<_>>();
-        let additionals = (0..header.ar_count.get()).map(|_| ResourceRecord::parse(&mut stream)).collect::<Vec<_>>();
+        let questions = (0..header.qd_count.get()).map(|_| Question::parse(&mut stream)).collect::<Result<_>>()?;
+        let answers = (0..header.an_count.get())
+            .map(|_| ResourceRecord::parse(&mut stream))
+            .collect::<Result<_>>()?;
+        let nameservers = (0..header.ns_count.get())
+            .map(|_| ResourceRecord::parse(&mut stream))
+            .collect::<Result<_>>()?;
+        let additionals = (0..header.ar_count.get())
+            .map(|_| ResourceRecord::parse(&mut stream))
+            .collect::<Result<_>>()?;
 
-        Some(Self {
+        Ok(Self {
             header,
             questions,
             answers,
@@ -505,9 +512,9 @@ mod test {
 
     // some tests are copied from https://github.com/librespot-org/libmdns/blob/master/src/dns_parser/parser.rs
     #[test]
-    fn parse_simple_query() {
+    fn parse_simple_query() -> Result<()> {
         let query = b"\x06%\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x07example\x03com\x00\x00\x01\x80\x01";
-        let packet = Packet::parse(query).unwrap();
+        let packet = Packet::parse(query)?;
 
         assert_eq!(packet.header.id.get(), 1573);
         assert!(packet.header.is_query());
@@ -527,12 +534,14 @@ mod test {
 
         assert_eq!(new_packet.len(), query.len());
         assert_eq!(&new_packet, query);
+
+        Ok(())
     }
 
     #[test]
-    fn parse_simple_response() {
+    fn parse_simple_response() -> Result<()> {
         let response =  b"\x06%\x81\x80\x00\x01\x00\x01\x00\x00\x00\x00\x07example\x03com\x00\x00\x01\x80\x01\x07example\x03com\x00\x00\x01\x80\x01\x00\x00\x04\xf8\x00\x04]\xb8\xd8\"";
-        let packet = Packet::parse(response).unwrap();
+        let packet = Packet::parse(response)?;
 
         assert_eq!(packet.header.id.get(), 1573);
         assert!(!packet.header.is_query());
@@ -559,12 +568,14 @@ mod test {
 
         assert_eq!(new_packet.len(), response.len());
         assert_eq!(&new_packet, response);
+
+        Ok(())
     }
 
     #[test]
-    fn parse_simple_response_with_name_pointer() {
+    fn parse_simple_response_with_name_pointer() -> Result<()> {
         let response =  b"\x06%\x81\x80\x00\x01\x00\x01\x00\x00\x00\x00\x07example\x03com\x00\x00\x01\x00\x01\xc0\x0c\x00\x01\x00\x01\x00\x00\x04\xf8\x00\x04]\xb8\xd8\"";
-        let packet = Packet::parse(response).unwrap();
+        let packet = Packet::parse(response)?;
 
         assert_eq!(packet.header.id.get(), 1573);
         assert!(!packet.header.is_query());
@@ -586,12 +597,14 @@ mod test {
         assert_eq!(packet.answers[0].name.labels[1], "com");
         assert!(matches!(packet.answers[0].data, ResourceRecordData::A(_)));
         assert!(packet.answers[0].class == Class::IN);
+
+        Ok(())
     }
 
     #[test]
-    fn parse_mdns_query() {
+    fn parse_mdns_query() -> Result<()> {
         let query = b"\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x00\x0f_companion-link\x04_tcp\x05local\x00\x00\x0c\x80\x01\x08_homekit\xc0\x1c\x00\x0c\x80\x01\x08_airplay\xc0\x1c\x00\x0c\x80\x01\x05_raop\xc0\x1c\x00\x0c\x80\x01\x0c_sleep-proxy\x04_udp\xc0!\x00\x0c\x80\x01";
-        let packet = Packet::parse(query).unwrap();
+        let packet = Packet::parse(query)?;
 
         assert_eq!(packet.header.id.get(), 0);
         assert!(packet.header.is_query());
@@ -599,10 +612,12 @@ mod test {
         assert_eq!(packet.header.an_count.get(), 0);
         assert_eq!(packet.header.ns_count.get(), 0);
         assert_eq!(packet.header.ar_count.get(), 0);
+
+        Ok(())
     }
 
     #[test]
-    fn write_and_parse() {
+    fn write_and_parse() -> Result<()> {
         let hostname = "hostname.local";
         let ip = Ipv4Addr::new(192, 168, 1, 1);
 
@@ -629,12 +644,14 @@ mod test {
 
         let packet = Packet::new_response(1234, Vec::new(), vec![answer], Vec::new(), vec![srv, txt, a]);
 
-        let packet2 = Packet::parse(&packet.write()).unwrap();
+        let packet2 = Packet::parse(&packet.write())?;
 
         assert_eq!(packet.header.id.get(), packet2.header.id.get());
         assert_eq!(packet.header.qd_count.get(), packet2.header.qd_count.get());
         assert_eq!(packet.header.an_count.get(), packet2.header.an_count.get());
         assert_eq!(packet.header.ns_count.get(), packet2.header.ns_count.get());
         assert_eq!(packet.header.ar_count.get(), packet2.header.ar_count.get());
+
+        Ok(())
     }
 }

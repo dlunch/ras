@@ -19,16 +19,16 @@ impl PulseAudioSink {
 }
 
 impl AudioSink for PulseAudioSink {
-    fn start(&self, channels: u8, rate: u32, format: AudioFormat) -> Box<dyn AudioSinkSession> {
+    fn start(&self, channels: u8, rate: u32, format: AudioFormat) -> Result<Box<dyn AudioSinkSession>> {
         let spec = Spec {
             format: Self::convert_format(format),
             channels,
             rate,
         };
 
-        let simple = Simple::new(None, "RAS", Direction::Playback, None, "Music", &spec, None, None).unwrap();
+        let simple = Simple::new(None, "RAS", Direction::Playback, None, "Music", &spec, None, None)?;
 
-        Box::new(PulseAudioSinkSession { simple })
+        Ok(Box::new(PulseAudioSinkSession { simple }))
     }
 }
 
@@ -37,7 +37,9 @@ pub struct PulseAudioSinkSession {
 }
 
 impl AudioSinkSession for PulseAudioSinkSession {
-    fn write(&self, payload: &[u8]) {
-        self.simple.write(payload).unwrap()
+    fn write(&self, payload: &[u8]) -> Result<()> {
+        self.simple.write(payload)?;
+
+        Ok(())
     }
 }
