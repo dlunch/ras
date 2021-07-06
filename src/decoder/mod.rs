@@ -1,4 +1,5 @@
 use alac::{Decoder as AlacDecoder, StreamInfo};
+use anyhow::Result;
 
 use crate::{sink::AudioFormat, util::convert_vec};
 
@@ -6,7 +7,7 @@ pub trait Decoder: Send {
     fn channels(&self) -> u8;
     fn rate(&self) -> u32;
     fn format(&self) -> AudioFormat;
-    fn decode(&mut self, raw: &[u8]) -> Vec<u8>;
+    fn decode(&mut self, raw: &[u8]) -> Result<Vec<u8>>;
 }
 
 pub struct AppleLoselessDecoder {
@@ -14,11 +15,11 @@ pub struct AppleLoselessDecoder {
 }
 
 impl AppleLoselessDecoder {
-    pub fn new(fmtp: &str) -> Self {
-        let stream_info = StreamInfo::from_sdp_format_parameters(fmtp).unwrap();
+    pub fn new(fmtp: &str) -> Result<Self> {
+        let stream_info = StreamInfo::from_sdp_format_parameters(fmtp)?;
         let decoder = AlacDecoder::new(stream_info);
 
-        Self { decoder }
+        Ok(Self { decoder })
     }
 }
 
@@ -35,10 +36,10 @@ impl Decoder for AppleLoselessDecoder {
         AudioFormat::S16NE
     }
 
-    fn decode(&mut self, raw: &[u8]) -> Vec<u8> {
+    fn decode(&mut self, raw: &[u8]) -> Result<Vec<u8>> {
         let mut out = vec![0i16; self.decoder.stream_info().max_samples_per_packet() as usize];
-        self.decoder.decode_packet(raw, &mut out, true).unwrap();
+        self.decoder.decode_packet(raw, &mut out, true)?;
 
-        unsafe { convert_vec(out) }
+        Ok(unsafe { convert_vec(out) })
     }
 }

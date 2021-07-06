@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use anyhow::{anyhow, Result};
 use async_std::io::{self, prelude::BufReadExt, BufReader, ReadExt};
 use futures::{future, stream::TryStreamExt};
 
@@ -11,7 +12,7 @@ pub struct Request {
 }
 
 impl Request {
-    pub async fn parse<S>(stream: S) -> io::Result<Option<Self>>
+    pub async fn parse<S>(stream: S) -> Result<Self>
     where
         S: io::Read + Unpin,
     {
@@ -24,7 +25,7 @@ impl Request {
             .await?;
 
         if lines.len() < 2 {
-            return Ok(None);
+            return Err(anyhow!("Buffer too short"));
         }
 
         let split = lines[0].split(' ').collect::<Vec<_>>();
@@ -41,7 +42,7 @@ impl Request {
 
         // TODO header casing
         let content = if let Some(length) = headers.get("Content-Length") {
-            let length = length.parse::<usize>().unwrap();
+            let length = length.parse::<usize>()?;
 
             let mut content = vec![0; length];
             reader.read_exact(&mut content).await?;
@@ -51,12 +52,12 @@ impl Request {
             Vec::new()
         };
 
-        Ok(Some(Self {
+        Ok(Self {
             method,
             path,
             headers,
             content,
-        }))
+        })
     }
 }
 
@@ -65,13 +66,11 @@ mod test {
     use super::*;
 
     #[async_std::test]
-    async fn test_simple_request() -> io::Result<()> {
+    async fn test_simple_request() -> Result<()> {
         let data = "GET /info RTSP/1.0\r\nX-Apple-ProtocolVersion: 1\r\nCSeq: 0\r\n\r\n";
 
         let req = Request::parse(data.as_bytes()).await?;
-        assert!(req.is_some());
 
-        let req = req.unwrap();
         assert_eq!(req.method, "GET");
         assert_eq!(req.path, "/info");
 

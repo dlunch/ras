@@ -5,7 +5,7 @@ use std::{
     time::Duration,
 };
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use async_std::{net::UdpSocket, task::spawn_blocking};
 use cidr_utils::cidr::Ipv4Cidr;
 use log::{debug, trace};
@@ -30,8 +30,7 @@ impl Server {
         debug!("hostname: {}", hostname);
 
         #[cfg(windows)]
-        let prefixes = ipconfig::get_adapters()
-            .unwrap()
+        let prefixes = ipconfig::get_adapters()?
             .into_iter()
             .flat_map(|adapter| {
                 adapter
@@ -42,11 +41,11 @@ impl Server {
 
                         // returns ipv4 {adapter_address}/{mask} cidr
                         if let IpAddr::V4(prefix_addr) = prefix.0 {
-                            let cidr = Ipv4Cidr::from_prefix_and_bits(prefix_addr, prefix.1 as u8).unwrap();
+                            let cidr = Ipv4Cidr::from_prefix_and_bits(prefix_addr, prefix.1 as u8).ok()?;
                             for address in adapter.ip_addresses() {
                                 if let IpAddr::V4(adapter_addr) = address {
                                     if cidr.contains(adapter_addr) && prefix.1 != 32 && prefix.1 != 0 {
-                                        return Some((*adapter_addr, Ipv4Cidr::from_prefix_and_bits(prefix_addr, prefix.1 as u8).unwrap()));
+                                        return Some((*adapter_addr, Ipv4Cidr::from_prefix_and_bits(prefix_addr, prefix.1 as u8).ok()?));
                                     }
                                 }
                             }
@@ -64,7 +63,7 @@ impl Server {
                 use get_if_addrs::IfAddr;
                 if let IfAddr::V4(addr) = if_addr.addr {
                     if addr.netmask != Ipv4Addr::new(0, 0, 0, 0) && addr.netmask != Ipv4Addr::new(255, 255, 255, 255) {
-                        return Some((addr.ip, Ipv4Cidr::from_prefix_and_mask(addr.ip, addr.netmask).unwrap()));
+                        return Some((addr.ip, Ipv4Cidr::from_prefix_and_mask(addr.ip, addr.netmask).ok()?));
                     }
                 }
 
@@ -135,7 +134,7 @@ impl Server {
     }
 
     fn handle_packet(&self, message: &Message) -> Option<(Option<Packet>, Option<Packet>)> {
-        let packet = Packet::parse(&message.data)?;
+        let packet = Packet::parse(&message.data).ok()?;
 
         if packet.header.is_query() {
             let mut unicast_response = (Vec::new(), Vec::new());
@@ -144,7 +143,7 @@ impl Server {
             for question in &packet.questions {
                 for service in &self.services {
                     if question.r#type == ResourceType::PTR && question.name.equals(&service.r#type) {
-                        let (mut answers, mut additionals) = self.create_response(service, message.origin_address.ip());
+                        let (mut answers, mut additionals) = self.create_response(service, message.origin_address.ip()).ok()?;
 
                         if question.unicast {
                             unicast_response.0.append(&mut answers);
@@ -168,10 +167,10 @@ impl Server {
         None
     }
 
-    fn create_response(&self, service: &Service, remote_addr: &Ipv4Addr) -> (Vec<ResourceRecord>, Vec<ResourceRecord>) {
+    fn create_response(&self, service: &Service, remote_addr: &Ipv4Addr) -> Result<(Vec<ResourceRecord>, Vec<ResourceRecord>)> {
         debug!("Creating response for {}", service.name);
 
-        let ip = self.find_local_ip(remote_addr).unwrap();
+        let ip = self.find_local_ip(remote_addr).ok_or_else(|| anyhow!("Can't find local ip address"))?;
 
         // PTR answer
         let answers = vec![ResourceRecord::new(
@@ -200,7 +199,7 @@ impl Server {
         // A record
         additionals.push(ResourceRecord::new(&self.hostname, 3600, ResourceRecordData::A(ip)));
 
-        (answers, additionals)
+        Ok((answers, additionals))
     }
 
     fn find_local_ip(&self, remote_addr: &Ipv4Addr) -> Option<Ipv4Addr> {
