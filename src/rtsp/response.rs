@@ -68,7 +68,7 @@ mod test {
 
     #[async_std::test]
     async fn test_simple_response() -> Result<()> {
-        let response = Response::new(StatusCode::Ok, hashmap! { "Test" => "Test".into() });
+        let response = Response::with_headers(StatusCode::Ok, hashmap! { "Test" => "Test".into() });
 
         let mut buf = Vec::new();
         response.write(&mut buf).await?;
