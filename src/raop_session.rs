@@ -1,4 +1,4 @@
-use std::{collections::HashMap, str, sync::Arc};
+use std::{str, sync::Arc};
 
 use anyhow::{anyhow, Result};
 use async_std::{
@@ -51,35 +51,39 @@ impl RaopSession {
     async fn handle_request(&mut self, request: &Request) -> Result<Response> {
         let cseq = request.headers.get("CSeq");
 
-        let (status, mut header) = match request.method.as_str() {
-            "ANNOUNCE" => self.handle_announce(request).await?,
-            "SETUP" => self.handle_setup(request).await?,
-            "RECORD" => (StatusCode::Ok, HashMap::new()),
-            "PAUSE" => (StatusCode::Ok, HashMap::new()),
-            "FLUSH" => (StatusCode::Ok, HashMap::new()),
-            "TEARDOWN" => (StatusCode::Ok, HashMap::new()),
-            "OPTIONS" => self.handle_options(request).await?,
-            "GET_PARAMETER" => (StatusCode::Ok, HashMap::new()),
-            "SET_PARAMETER" => (StatusCode::Ok, HashMap::new()),
-            "POST" => (StatusCode::NotFound, HashMap::new()),
-            "GET" => (StatusCode::NotFound, HashMap::new()),
+        let result = match request.method.as_str() {
+            "ANNOUNCE" => self.handle_announce(request).await,
+            "SETUP" => self.handle_setup(request).await,
+            "RECORD" => Ok(Response::new(StatusCode::Ok)),
+            "PAUSE" => Ok(Response::new(StatusCode::Ok)),
+            "FLUSH" => Ok(Response::new(StatusCode::Ok)),
+            "TEARDOWN" => Ok(Response::new(StatusCode::Ok)),
+            "OPTIONS" => self.handle_options(request).await,
+            "GET_PARAMETER" => Ok(Response::new(StatusCode::Ok)),
+            "SET_PARAMETER" => Ok(Response::new(StatusCode::Ok)),
+            "POST" => Ok(Response::new(StatusCode::NotFound)),
+            "GET" => Ok(Response::new(StatusCode::NotFound)),
             _ => {
                 warn!("Unhandled method {}", request.method);
 
-                (StatusCode::MethodNotAllowed, HashMap::new())
+                Ok(Response::new(StatusCode::MethodNotAllowed))
             }
         };
 
-        if let Some(cseq) = cseq {
-            header.insert("CSeq", cseq.into());
-        }
-        header.insert("Server", "ras/0.1".into());
+        if let Ok(mut response) = result {
+            if let Some(cseq) = cseq {
+                response.headers.insert("CSeq", cseq.into());
+            }
+            response.headers.insert("Server", "ras/0.1".into());
 
-        Ok(Response::new(status, header))
+            Ok(response)
+        } else {
+            Ok(Response::new(StatusCode::InternalServerError))
+        }
     }
 
-    async fn handle_options(&mut self, _: &Request) -> Result<(StatusCode, HashMap<&'static str, String>)> {
-        Ok((
+    async fn handle_options(&mut self, _: &Request) -> Result<Response> {
+        Ok(Response::with_headers(
             StatusCode::Ok,
             hashmap! {
                 "Public" => "ANNOUNCE, SETUP, RECORD, PAUSE, FLUSH, TEARDOWN, OPTIONS, GET_PARAMETER, SET_PARAMETER, POST, GET".into()
@@ -87,8 +91,8 @@ impl RaopSession {
         ))
     }
 
-    async fn handle_announce(&mut self, request: &Request) -> Result<(StatusCode, HashMap<&'static str, String>)> {
-        let (codec, fmtp) = (|| {
+    async fn handle_announce(&mut self, request: &Request) -> Result<Response> {
+        let response = (|| {
             let mut codec = None;
             let mut fmtp = None;
 
@@ -107,47 +111,52 @@ impl RaopSession {
                 }
             }
 
-            Some((codec?, fmtp?))
-        })()
-        .ok_or_else(|| anyhow!("Invalid request"))?;
+            debug!("codec: {:?}, fmtp: {:?}", codec, fmtp);
 
-        debug!("codec: {:?}, fmtp: {:?}", codec, fmtp);
+            match codec? {
+                "AppleLossless" => self.decoder = Some(Box::new(AppleLoselessDecoder::new(fmtp?).ok()?)),
+                unk => panic!("Unknown codec {:?}", unk),
+            }
 
-        match codec {
-            "AppleLossless" => self.decoder = Some(Box::new(AppleLoselessDecoder::new(fmtp)?)),
-            unk => panic!("Unknown codec {:?}", unk),
+            Some(Response::new(StatusCode::Ok))
+        })();
+
+        if let Some(response) = response {
+            Ok(response)
+        } else {
+            Ok(Response::new(StatusCode::BadRequest))
         }
-
-        Ok((StatusCode::Ok, HashMap::new()))
     }
 
-    async fn handle_setup(&mut self, request: &Request) -> Result<(StatusCode, HashMap<&'static str, String>)> {
-        let client_transport = request.headers.get("Transport").ok_or_else(|| anyhow!("Invalid request"))?;
+    async fn handle_setup(&mut self, request: &Request) -> Result<Response> {
+        if let Some(client_transport) = request.headers.get("Transport") {
+            debug!("client_transport: {:?}", client_transport);
 
-        debug!("client_transport: {:?}", client_transport);
+            let rtp = UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 0)).await?;
+            let control = UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 0)).await?;
+            let timing = UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 0)).await?;
 
-        let rtp = UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 0)).await?;
-        let control = UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 0)).await?;
-        let timing = UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 0)).await?;
+            let transport = format!(
+                "RTP/AVP/UDP;unicast;mode=record;server_port={};control_port={};timing_port={}",
+                rtp.local_addr()?.port(),
+                control.local_addr()?.port(),
+                timing.local_addr()?.port()
+            );
 
-        let transport = format!(
-            "RTP/AVP/UDP;unicast;mode=record;server_port={};control_port={};timing_port={}",
-            rtp.local_addr()?.port(),
-            control.local_addr()?.port(),
-            timing.local_addr()?.port()
-        );
+            let response_headers = hashmap! {
+                "Session" => self.id.to_string(),
+                "Transport" => transport
+            };
 
-        let response_headers = hashmap! {
-            "Session" => self.id.to_string(),
-            "Transport" => transport
-        };
+            let rtp_type = self.rtp_type.take().ok_or_else(|| anyhow!("Invalid request"))?;
+            let decoder = self.decoder.take().ok_or_else(|| anyhow!("Invalid request"))?;
+            let sink = self.sink.clone();
+            task::spawn(async move { Self::rtp_loop(rtp, rtp_type, decoder, sink).await });
 
-        let rtp_type = self.rtp_type.take().ok_or_else(|| anyhow!("Invalid request"))?;
-        let decoder = self.decoder.take().ok_or_else(|| anyhow!("Invalid request"))?;
-        let sink = self.sink.clone();
-        task::spawn(async move { Self::rtp_loop(rtp, rtp_type, decoder, sink).await });
-
-        Ok((StatusCode::Ok, response_headers))
+            Ok(Response::with_headers(StatusCode::Ok, response_headers))
+        } else {
+            Ok(Response::new(StatusCode::BadRequest))
+        }
     }
 
     async fn rtp_loop(socket: UdpSocket, rtp_type: u8, mut decoder: Box<dyn Decoder>, sink: Arc<Box<dyn AudioSink>>) -> Result<()> {
