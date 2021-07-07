@@ -49,7 +49,7 @@ impl RaopSession {
     }
 
     async fn handle_request(&mut self, request: &Request) -> Result<Response> {
-        let cseq = request.headers.get("CSeq").unwrap();
+        let cseq = request.headers.get("CSeq");
 
         let (status, mut header) = match request.method.as_str() {
             "ANNOUNCE" => self.handle_announce(request).await?,
@@ -70,7 +70,9 @@ impl RaopSession {
             }
         };
 
-        header.insert("CSeq", cseq.into());
+        if let Some(cseq) = cseq {
+            header.insert("CSeq", cseq.into());
+        }
         header.insert("Server", "ras/0.1".into());
 
         Ok(Response::new(status, header))
