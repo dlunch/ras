@@ -1,6 +1,6 @@
 use std::{collections::HashMap, str, sync::Arc};
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use async_std::{
     net::{Ipv4Addr, SocketAddrV4, TcpStream, UdpSocket},
     task,
@@ -88,27 +88,33 @@ impl RaopSession {
     }
 
     async fn handle_announce(&mut self, request: &Request) -> Result<(StatusCode, HashMap<&'static str, String>)> {
-        let mut codec = None;
-        let mut fmtp = None;
-        for line in str::from_utf8(&request.content)?.lines() {
-            if line.starts_with("a=rtpmap") {
-                // a=rtpmap:96 AppleLossless
+        let (codec, fmtp) = (|| {
+            let mut codec = None;
+            let mut fmtp = None;
 
-                let content = &line["a=rtpmap".len() + 1..];
-                let mut split = content.split(' ');
+            for line in str::from_utf8(&request.content).ok()?.lines() {
+                if line.starts_with("a=rtpmap") {
+                    // a=rtpmap:96 AppleLossless
 
-                self.rtp_type = Some(split.next().unwrap().parse()?);
-                codec = Some(split.next().unwrap());
-            } else if line.starts_with("a=fmtp") {
-                // a=fmtp:96 352 0 16 40 10 14 2 255 0 0 44100
-                fmtp = Some(&line[line.find(' ').unwrap() + 1..]);
+                    let content = &line["a=rtpmap".len() + 1..];
+                    let mut split = content.split(' ');
+
+                    self.rtp_type = Some(split.next()?.parse().ok()?);
+                    codec = Some(split.next()?);
+                } else if line.starts_with("a=fmtp") {
+                    // a=fmtp:96 352 0 16 40 10 14 2 255 0 0 44100
+                    fmtp = Some(&line[line.find(' ')? + 1..]);
+                }
             }
-        }
+
+            Some((codec?, fmtp?))
+        })()
+        .ok_or_else(|| anyhow!("Invalid request"))?;
 
         debug!("codec: {:?}, fmtp: {:?}", codec, fmtp);
 
-        match codec.unwrap() {
-            "AppleLossless" => self.decoder = Some(Box::new(AppleLoselessDecoder::new(fmtp.unwrap())?)),
+        match codec {
+            "AppleLossless" => self.decoder = Some(Box::new(AppleLoselessDecoder::new(fmtp)?)),
             unk => panic!("Unknown codec {:?}", unk),
         }
 
@@ -116,7 +122,7 @@ impl RaopSession {
     }
 
     async fn handle_setup(&mut self, request: &Request) -> Result<(StatusCode, HashMap<&'static str, String>)> {
-        let client_transport = request.headers.get("Transport").unwrap();
+        let client_transport = request.headers.get("Transport").ok_or_else(|| anyhow!("Invalid request"))?;
 
         debug!("client_transport: {:?}", client_transport);
 
@@ -136,8 +142,8 @@ impl RaopSession {
             "Transport" => transport
         };
 
-        let rtp_type = self.rtp_type.take().unwrap();
-        let decoder = self.decoder.take().unwrap();
+        let rtp_type = self.rtp_type.take().ok_or_else(|| anyhow!("Invalid request"))?;
+        let decoder = self.decoder.take().ok_or_else(|| anyhow!("Invalid request"))?;
         let sink = self.sink.clone();
         task::spawn(async move { Self::rtp_loop(rtp, rtp_type, decoder, sink).await });
 
