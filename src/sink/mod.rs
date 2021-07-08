@@ -3,7 +3,9 @@ mod rodio;
 
 use anyhow::Result;
 
+#[derive(Copy, Clone)]
 pub enum AudioFormat {
+    S16BE,
     S16NE,
 }
 

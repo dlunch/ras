@@ -15,6 +15,7 @@ impl PulseAudioSink {
     fn convert_format(format: AudioFormat) -> Format {
         match format {
             AudioFormat::S16NE => Format::S16NE,
+            AudioFormat::S16BE => Format::S16be,
         }
     }
 }

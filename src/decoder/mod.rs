@@ -43,3 +43,33 @@ impl Decoder for AppleLoselessDecoder {
         Ok(unsafe { convert_vec(out) })
     }
 }
+
+pub struct RawPCMDecoder {
+    format: AudioFormat,
+    channels: u8,
+    rate: u32,
+}
+
+impl RawPCMDecoder {
+    pub fn new(format: AudioFormat, channels: u8, rate: u32) -> Result<Self> {
+        Ok(Self { format, channels, rate })
+    }
+}
+
+impl Decoder for RawPCMDecoder {
+    fn channels(&self) -> u8 {
+        self.channels
+    }
+
+    fn rate(&self) -> u32 {
+        self.rate
+    }
+
+    fn format(&self) -> AudioFormat {
+        self.format
+    }
+
+    fn decode(&mut self, raw: &[u8]) -> Result<Vec<u8>> {
+        Ok(raw.to_vec())
+    }
+}
