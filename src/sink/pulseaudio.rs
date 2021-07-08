@@ -1,3 +1,4 @@
+use anyhow::Result;
 use libpulse_binding::sample::{Format, Spec};
 use libpulse_binding::stream::Direction;
 use libpulse_simple_binding::Simple;
