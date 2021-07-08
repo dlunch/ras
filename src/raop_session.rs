@@ -113,7 +113,7 @@ impl RaopSession {
             match codec {
                 "AppleLossless" => {
                     // 96 352 0 16 40 10 14 2 255 0 0 44100
-                    let fmtp_attr = attribute_value("rtpmap")?;
+                    let fmtp_attr = attribute_value("fmtp")?;
                     let fmtp = &fmtp_attr[fmtp_attr.find(char::is_whitespace)? + 1..];
 
                     debug!("fmtp: {:?}", fmtp);
