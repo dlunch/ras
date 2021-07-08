@@ -100,6 +100,10 @@ impl RaopSession {
                 return None;
             }
 
+            // We can't use Codec structure because its fields are private as of sdp 0.2.1
+            // let codec = sdp.get_codec_for_payload_type(96).ok()?;
+            // debug!("codec: {:?}", codec);
+
             let media_description = &sdp.media_descriptions[0];
             let attribute_value = |attr: &str| media_description.attributes.iter().find(|&x| x.key == attr)?.value.as_ref();
 
