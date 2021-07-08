@@ -101,19 +101,19 @@ impl RaopSession {
             }
 
             let media_description = &sdp.media_descriptions[0];
+            let attribute_value = |attr: &str| media_description.attributes.iter().find(|&x| x.key == attr)?.value.as_ref();
 
             // 96 AppleLossless
-            let rtpmap_attr = media_description.attributes.iter().find(|&x| x.key == "rtpmap")?.value.as_ref()?;
-            let mut split = rtpmap_attr.split_whitespace();
+            let mut rtpmap_split = attribute_value("rtpmap")?.split_whitespace();
 
-            let (rtp_type, codec) = (split.next()?, split.next()?);
+            let (rtp_type, codec) = (rtpmap_split.next()?, rtpmap_split.next()?);
             self.rtp_type = Some(rtp_type.parse().ok()?);
 
             debug!("codec: {:?}", codec);
             match codec {
                 "AppleLossless" => {
                     // 96 352 0 16 40 10 14 2 255 0 0 44100
-                    let fmtp_attr = media_description.attributes.iter().find(|&x| x.key == "fmtp")?.value.as_ref()?;
+                    let fmtp_attr = attribute_value("rtpmap")?;
                     let fmtp = &fmtp_attr[fmtp_attr.find(char::is_whitespace)? + 1..];
 
                     debug!("fmtp: {:?}", fmtp);
