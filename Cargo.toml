@@ -21,6 +21,7 @@ mac_address = { version = "^1.1" }
 clap = { version = "^2.33" }
 rodio = { version = "^0.14", default-features = false }
 anyhow = { version = "^1.0" }
+sdp = { version = "^0.2" }
 
 [target.'cfg(windows)'.dependencies]
 ipconfig = { version = "^0.2" }
