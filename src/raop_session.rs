@@ -11,9 +11,9 @@ use rtp_rs::RtpReader;
 use sdp::session_description::SessionDescription;
 
 use super::{
-    decoder::{AppleLoselessDecoder, Decoder},
+    decoder::{AppleLoselessDecoder, Decoder, RawPCMDecoder},
     rtsp::{Request, Response, StatusCode},
-    sink::AudioSink,
+    sink::{AudioFormat, AudioSink},
 };
 
 pub struct RaopSession {
@@ -119,6 +119,7 @@ impl RaopSession {
                     debug!("fmtp: {:?}", fmtp);
                     self.decoder = Some(Box::new(AppleLoselessDecoder::new(fmtp).ok()?))
                 }
+                "L16/44100/2" => self.decoder = Some(Box::new(RawPCMDecoder::new(AudioFormat::S16BE, 2, 44100).ok()?)),
                 unk => panic!("Unknown codec {:?}", unk),
             };
 

@@ -4,6 +4,7 @@ use std::{
 };
 
 use anyhow::{Error, Result};
+use cfg_if::cfg_if;
 use rodio::{buffer::SamplesBuffer, OutputStream, Sink};
 
 use super::{AudioFormat, AudioSink, AudioSinkSession};
@@ -59,6 +60,20 @@ impl AudioSinkSession for RodioAudioSinkSession {
     fn write(&self, payload: &[u8]) -> Result<()> {
         let buffer = match self.format {
             AudioFormat::S16NE => SamplesBuffer::new(self.channels, self.rate, unsafe { convert_vec(payload.to_vec()) }),
+            AudioFormat::S16BE => {
+                cfg_if! {
+                    if #[cfg(target_endian = "big")] {
+                        SamplesBuffer::new(self.channels, self.rate, unsafe { convert_vec(payload.to_vec()) })
+                    }
+                    else if #[cfg(target_endian = "little")] {
+                        let mut buf = vec![0; payload.len() / 2];
+                        for i in 0..payload.len() / 2 {
+                            buf[i] = i16::from_be_bytes([payload[i * 2], payload[i * 2 + 1]]);
+                        }
+                        SamplesBuffer::new(self.channels, self.rate, buf)
+                    }
+                }
+            }
         };
 
         self.sender.send(buffer)?;
