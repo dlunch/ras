@@ -1,4 +1,4 @@
-use std::{str, sync::Arc};
+use std::{io, str, sync::Arc};
 
 use anyhow::{anyhow, Result};
 use async_std::{
@@ -8,6 +8,7 @@ use async_std::{
 use log::{debug, trace, warn};
 use maplit::hashmap;
 use rtp_rs::RtpReader;
+use sdp::session_description::SessionDescription;
 
 use super::{
     decoder::{AppleLoselessDecoder, Decoder},
@@ -93,30 +94,33 @@ impl RaopSession {
 
     async fn handle_announce(&mut self, request: &Request) -> Result<Response> {
         let response = (|| {
-            let mut codec = None;
-            let mut fmtp = None;
+            let sdp = SessionDescription::unmarshal(&mut io::Cursor::new(&request.content)).ok()?;
 
-            for line in str::from_utf8(&request.content).ok()?.lines() {
-                if line.starts_with("a=rtpmap") {
-                    // a=rtpmap:96 AppleLossless
+            if sdp.media_descriptions.len() != 1 {
+                return None;
+            }
 
-                    let content = &line["a=rtpmap".len() + 1..];
-                    let mut split = content.split(' ');
+            let media_description = &sdp.media_descriptions[0];
 
-                    self.rtp_type = Some(split.next()?.parse().ok()?);
-                    codec = Some(split.next()?);
-                } else if line.starts_with("a=fmtp") {
-                    // a=fmtp:96 352 0 16 40 10 14 2 255 0 0 44100
-                    fmtp = Some(&line[line.find(' ')? + 1..]);
+            // 96 AppleLossless
+            let rtpmap_attr = media_description.attributes.iter().find(|&x| x.key == "rtpmap")?.value.as_ref()?;
+            let mut split = rtpmap_attr.split_whitespace();
+
+            let (rtp_type, codec) = (split.next()?, split.next()?);
+            self.rtp_type = Some(rtp_type.parse().ok()?);
+
+            debug!("codec: {:?}", codec);
+            match codec {
+                "AppleLossless" => {
+                    // 96 352 0 16 40 10 14 2 255 0 0 44100
+                    let fmtp_attr = media_description.attributes.iter().find(|&x| x.key == "fmtp")?.value.as_ref()?;
+                    let fmtp = &fmtp_attr[fmtp_attr.find(char::is_whitespace)? + 1..];
+
+                    debug!("fmtp: {:?}", fmtp);
+                    self.decoder = Some(Box::new(AppleLoselessDecoder::new(fmtp).ok()?))
                 }
-            }
-
-            debug!("codec: {:?}, fmtp: {:?}", codec, fmtp);
-
-            match codec? {
-                "AppleLossless" => self.decoder = Some(Box::new(AppleLoselessDecoder::new(fmtp?).ok()?)),
                 unk => panic!("Unknown codec {:?}", unk),
-            }
+            };
 
             Some(Response::new(StatusCode::Ok))
         })();
