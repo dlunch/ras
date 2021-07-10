@@ -42,14 +42,14 @@ impl RaopSession {
             let req = Request::parse(&mut self.stream).await?;
             trace!("req {} {} {:?} {:?}", req.method, req.path, req.headers, str::from_utf8(&req.content)?);
 
-            let res = self.handle_request(&req).await?;
+            let res = self.handle_request(&req).await;
             trace!("res {} {:?}", res.status as u32, res.headers);
 
             res.write(&mut self.stream).await?;
         }
     }
 
-    async fn handle_request(&mut self, request: &Request) -> Result<Response> {
+    async fn handle_request(&mut self, request: &Request) -> Response {
         let cseq = request.headers.get("CSeq");
 
         let result = match request.method.as_str() {
@@ -77,9 +77,9 @@ impl RaopSession {
             }
             response.headers.insert("Server", "ras/0.1".into());
 
-            Ok(response)
+            response
         } else {
-            Ok(Response::new(StatusCode::InternalServerError))
+            Response::new(StatusCode::InternalServerError)
         }
     }
 
