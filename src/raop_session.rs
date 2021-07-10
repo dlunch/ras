@@ -113,8 +113,10 @@ impl RaopSession {
             let (rtp_type, codec) = (rtpmap_split.next()?, rtpmap_split.next()?);
             self.rtp_type = Some(rtp_type.parse().ok()?);
 
+            let codec_parameters = codec.split('/').collect::<Vec<_>>();
+
             debug!("codec: {:?}", codec);
-            match codec {
+            match codec_parameters[0] {
                 "AppleLossless" => {
                     // 96 352 0 16 40 10 14 2 255 0 0 44100
                     let fmtp_attr = attribute_value("fmtp")?;
@@ -123,7 +125,11 @@ impl RaopSession {
                     debug!("fmtp: {:?}", fmtp);
                     self.decoder = Some(Box::new(AppleLoselessDecoder::new(fmtp).ok()?))
                 }
-                "L16/44100/2" => self.decoder = Some(Box::new(RawPCMDecoder::new(AudioFormat::S16BE, 2, 44100).ok()?)),
+                "L16" => {
+                    let rate = codec_parameters[1].parse().ok()?;
+                    let channels = codec_parameters[2].parse().ok()?;
+                    self.decoder = Some(Box::new(RawPCMDecoder::new(AudioFormat::S16BE, channels, rate).ok()?))
+                }
                 unk => panic!("Unknown codec {:?}", unk),
             };
 
