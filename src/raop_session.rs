@@ -31,7 +31,7 @@ pub struct RaopSession {
 }
 
 impl RaopSession {
-    pub async fn start(id: u32, stream: TcpStream, sink: Arc<Box<dyn AudioSink>>, mac_address: MacAddress) -> Result<()> {
+    pub async fn start(id: u32, stream: TcpStream, sink: Arc<Box<dyn AudioSink>>, mac_address: MacAddress) {
         let mut session = Self {
             id,
             stream,
@@ -42,13 +42,19 @@ impl RaopSession {
             cipher: None,
         };
 
-        session.rtsp_loop().await
+        session.rtsp_loop().await.unwrap()
     }
 
     async fn rtsp_loop(&mut self) -> Result<()> {
         loop {
             let req = Request::parse(&mut self.stream).await?;
-            trace!("req {} {} {:?} {:?}", req.method, req.path, req.headers, str::from_utf8(&req.content)?);
+            trace!(
+                "req {} {} {:?} {:?}",
+                req.method,
+                req.path,
+                req.headers,
+                str::from_utf8(&req.content).unwrap_or("<Binary>")
+            );
 
             let res = self.handle_request(&req).await;
             trace!("res {} {:?}", res.status as u32, res.headers);

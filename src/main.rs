@@ -74,7 +74,7 @@ async fn main() -> Result<()> {
                 "pw=false",
             ],
         );
-        let server = mdns::Server::new(vec![service])?;
+        let server = mdns::Server::new(vec![service]).unwrap();
         server.serve().await
     });
 
@@ -85,7 +85,7 @@ async fn main() -> Result<()> {
 
 pub async fn serve<F>(ip: IpAddr, port: u16, handler: impl Fn(u32, TcpStream) -> F) -> Result<()>
 where
-    F: Future<Output = Result<()>> + Send + 'static,
+    F: Future<Output = ()> + Send + 'static,
 {
     let listener = TcpListener::bind(SocketAddr::new(ip, port)).await?;
     let mut incoming = listener.incoming();
