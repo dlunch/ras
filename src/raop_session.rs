@@ -199,7 +199,7 @@ impl RaopSession {
         let private_key = RSAPrivateKey::from_pkcs1(&key.contents)?;
 
         let aeskey = private_key.decrypt(PaddingScheme::new_oaep::<sha1::Sha1>(), rsaaeskey)?;
-        let cipher = Cbc::<Aes128, ZeroPadding>::new_from_slices(&aeskey, &aesiv).unwrap();
+        let cipher = Cbc::<Aes128, ZeroPadding>::new_from_slices(&aeskey, aesiv).unwrap();
 
         self.cipher = Some(cipher);
 
