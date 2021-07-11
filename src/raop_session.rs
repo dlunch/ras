@@ -133,6 +133,18 @@ impl RaopSession {
                 unk => panic!("Unknown codec {:?}", unk),
             };
 
+            let rsaaeskey = attribute_value("rsaaeskey");
+            let aesiv = attribute_value("aesiv");
+
+            if let Some(rsaaeskey) = rsaaeskey {
+                if let Some(aesiv) = aesiv {
+                    let rsaaeskey = base64::decode(rsaaeskey).ok()?;
+                    let aesiv = base64::decode(aesiv).ok()?;
+
+                    debug!("key: {:?}, iv: {:?}", rsaaeskey, aesiv);
+                }
+            }
+
             Some(Response::new(StatusCode::Ok))
         })();
 
