@@ -1,6 +1,6 @@
 # Rust Airplay Server
 
-Only unencrypted RAOP service (Airport Express) is implemented now.
+RAOP service (Airport Express) is implemented now.
 
 ## Local testing
 
