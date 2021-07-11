@@ -3,11 +3,12 @@ use std::{io, str, sync::Arc};
 use aes::Aes128;
 use anyhow::{anyhow, Result};
 use async_std::{
-    net::{Ipv4Addr, SocketAddrV4, TcpStream, UdpSocket},
+    net::{IpAddr, Ipv4Addr, SocketAddrV4, TcpStream, UdpSocket},
     task,
 };
 use block_modes::{block_padding::ZeroPadding, BlockMode, Cbc};
 use log::{debug, trace, warn};
+use mac_address::MacAddress;
 use maplit::hashmap;
 use rsa::{PaddingScheme, RSAPrivateKey};
 use rtp_rs::RtpReader;
@@ -22,6 +23,7 @@ use super::{
 pub struct RaopSession {
     id: u32,
     stream: TcpStream,
+    mac_address: MacAddress,
     rtp_type: Option<u8>,
     decoder: Option<Box<dyn Decoder>>,
     sink: Arc<Box<dyn AudioSink>>,
@@ -29,10 +31,11 @@ pub struct RaopSession {
 }
 
 impl RaopSession {
-    pub async fn start(id: u32, stream: TcpStream, sink: Arc<Box<dyn AudioSink>>) -> Result<()> {
+    pub async fn start(id: u32, stream: TcpStream, sink: Arc<Box<dyn AudioSink>>, mac_address: MacAddress) -> Result<()> {
         let mut session = Self {
             id,
             stream,
+            mac_address,
             rtp_type: None,
             decoder: None,
             sink,
@@ -56,6 +59,7 @@ impl RaopSession {
 
     async fn handle_request(&mut self, request: &Request) -> Response {
         let cseq = request.headers.get("CSeq");
+        let apple_challenge = request.headers.get("Apple-Challenge");
 
         let result = match request.method.as_str() {
             "ANNOUNCE" => self.handle_announce(request).await,
@@ -79,6 +83,9 @@ impl RaopSession {
         if let Ok(mut response) = result {
             if let Some(cseq) = cseq {
                 response.headers.insert("CSeq", cseq.into());
+            }
+            if let Some(apple_challenge) = apple_challenge {
+                response.headers.insert("Apple-Response", self.apple_response(apple_challenge).unwrap());
             }
             response.headers.insert("Server", "ras/0.1".into());
 
@@ -204,6 +211,23 @@ impl RaopSession {
         self.cipher = Some(cipher);
 
         Ok(())
+    }
+
+    fn apple_response(&self, apple_challenge: &str) -> Result<String> {
+        let mut challenge = base64::decode(apple_challenge).unwrap();
+
+        let local_addr = self.stream.local_addr().unwrap();
+        match local_addr.ip() {
+            IpAddr::V4(ip) => challenge.extend_from_slice(&ip.octets()),
+            IpAddr::V6(ip) => challenge.extend_from_slice(&ip.octets()),
+        }
+        challenge.extend_from_slice(&self.mac_address.bytes());
+
+        let key = pem::parse(include_str!("airport_express.key"))?;
+        let private_key = RSAPrivateKey::from_pkcs1(&key.contents)?;
+        let response = private_key.sign(PaddingScheme::new_pkcs1v15_sign(None), &challenge)?;
+
+        Ok(base64::encode(response).replace("=", ""))
     }
 
     async fn rtp_loop(
