@@ -1,6 +1,6 @@
 # Rust Airplay Server
 
-RAOP service (Airport Express) is implemented now.
+Only RAOP service (Airport Express) is implemented now.
 
 ## Local testing
 
