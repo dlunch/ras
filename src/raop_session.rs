@@ -1,12 +1,15 @@
 use std::{io, str, sync::Arc};
 
+use aes::Aes128;
 use anyhow::{anyhow, Result};
 use async_std::{
     net::{Ipv4Addr, SocketAddrV4, TcpStream, UdpSocket},
     task,
 };
+use block_modes::{block_padding::ZeroPadding, BlockMode, Cbc};
 use log::{debug, trace, warn};
 use maplit::hashmap;
+use rsa::{PaddingScheme, RSAPrivateKey};
 use rtp_rs::RtpReader;
 use sdp::session_description::SessionDescription;
 
@@ -22,6 +25,7 @@ pub struct RaopSession {
     rtp_type: Option<u8>,
     decoder: Option<Box<dyn Decoder>>,
     sink: Arc<Box<dyn AudioSink>>,
+    cipher: Option<Cbc<Aes128, ZeroPadding>>,
 }
 
 impl RaopSession {
@@ -32,6 +36,7 @@ impl RaopSession {
             rtp_type: None,
             decoder: None,
             sink,
+            cipher: None,
         };
 
         session.rtsp_loop().await
@@ -142,6 +147,8 @@ impl RaopSession {
                     let aesiv = base64::decode(aesiv).ok()?;
 
                     debug!("key: {:?}, iv: {:?}", rsaaeskey, aesiv);
+
+                    self.init_cipher(&rsaaeskey, &aesiv).ok()?;
                 }
             }
 
@@ -178,7 +185,8 @@ impl RaopSession {
             let rtp_type = self.rtp_type.take().ok_or_else(|| anyhow!("Invalid request"))?;
             let decoder = self.decoder.take().ok_or_else(|| anyhow!("Invalid request"))?;
             let sink = self.sink.clone();
-            task::spawn(async move { Self::rtp_loop(rtp, rtp_type, decoder, sink).await });
+            let cipher = self.cipher.take();
+            task::spawn(async move { Self::rtp_loop(rtp, rtp_type, decoder, sink, cipher).await.unwrap() });
 
             Ok(Response::with_headers(StatusCode::Ok, response_headers))
         } else {
@@ -186,7 +194,25 @@ impl RaopSession {
         }
     }
 
-    async fn rtp_loop(socket: UdpSocket, rtp_type: u8, mut decoder: Box<dyn Decoder>, sink: Arc<Box<dyn AudioSink>>) -> Result<()> {
+    fn init_cipher(&mut self, rsaaeskey: &[u8], aesiv: &[u8]) -> Result<()> {
+        let key = pem::parse(include_str!("airport_express.key"))?;
+        let private_key = RSAPrivateKey::from_pkcs1(&key.contents)?;
+
+        let aeskey = private_key.decrypt(PaddingScheme::new_oaep::<sha1::Sha1>(), rsaaeskey)?;
+        let cipher = Cbc::<Aes128, ZeroPadding>::new_from_slices(&aeskey, &aesiv).unwrap();
+
+        self.cipher = Some(cipher);
+
+        Ok(())
+    }
+
+    async fn rtp_loop(
+        socket: UdpSocket,
+        rtp_type: u8,
+        mut decoder: Box<dyn Decoder>,
+        sink: Arc<Box<dyn AudioSink>>,
+        cipher: Option<Cbc<Aes128, ZeroPadding>>,
+    ) -> Result<()> {
         let session = sink.start(decoder.channels(), decoder.rate(), decoder.format())?;
 
         loop {
@@ -196,8 +222,17 @@ impl RaopSession {
             let rtp = RtpReader::new(&buf[..len]).map_err(|x| anyhow::Error::msg(format!("Can't read rtp packet {:?}", x)))?;
 
             if rtp.payload_type() == rtp_type {
-                let decoded_content = decoder.decode(rtp.payload())?;
-                session.write(&decoded_content)?;
+                let payload = if let Some(cipher) = &cipher {
+                    let mut decrypted = rtp.payload().to_vec();
+                    let cipher = cipher.clone();
+                    cipher.decrypt(&mut decrypted[..rtp.payload().len() & !0xf])?;
+
+                    decoder.decode(&decrypted)?
+                } else {
+                    decoder.decode(rtp.payload())?
+                };
+
+                session.write(&payload)?;
             }
         }
     }
