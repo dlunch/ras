@@ -37,14 +37,14 @@ async fn main() -> Result<()> {
 
     debug!("{:?}", matches);
 
-    let mac_address = get_mac_address()?.unwrap().to_string();
+    let mac_address = get_mac_address()?.unwrap();
     debug!("Mac address: {}", mac_address);
 
     let audio_sink: Arc<Box<dyn sink::AudioSink>> = Arc::new(sink::create(audio_sink));
 
     let raop_join_handle = spawn(async move {
         serve(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 7000, |id, stream| {
-            raop_session::RaopSession::start(id, stream, audio_sink.clone())
+            raop_session::RaopSession::start(id, stream, audio_sink.clone(), mac_address)
         })
         .await
     });
@@ -52,7 +52,7 @@ async fn main() -> Result<()> {
     let mdns_join_handle = spawn(async move {
         let service = mdns::Service::new(
             "_raop._tcp",
-            &format!("{}@{}", mac_address.replace(":", ""), server_name),
+            &format!("{}@{}", mac_address.to_string().replace(":", ""), server_name),
             7000,
             vec![
                 "sf=0x4",
