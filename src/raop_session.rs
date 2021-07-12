@@ -7,7 +7,7 @@ use async_std::{
     task,
 };
 use block_modes::{block_padding::ZeroPadding, BlockMode, Cbc};
-use log::{debug, trace, warn};
+use log::{debug, info, trace, warn};
 use mac_address::MacAddress;
 use maplit::hashmap;
 use rsa::{PaddingScheme, RSAPrivateKey};
@@ -42,7 +42,10 @@ impl RaopSession {
             cipher: None,
         };
 
-        session.rtsp_loop().await.unwrap()
+        let result = session.rtsp_loop().await;
+        if let Err(e) = result {
+            info!("Connection closed, {}", e);
+        }
     }
 
     async fn rtsp_loop(&mut self) -> Result<()> {
