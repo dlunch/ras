@@ -55,23 +55,16 @@ async fn main() -> Result<()> {
             &format!("{}@{}", mac_address.to_string().replace(":", ""), server_name),
             7000,
             vec![
-                "sf=0x4",
-                "fv=76400.10",
-                "am=ras",
-                "vs=105.1",
-                "tp=UDP",
-                "vn=65537",
-                "md=0,1,2",
-                "ss=16",
-                "sr=44100",
-                "da=true",
-                "sv=false",
-                "et=0,1",
-                "ek=1",
-                "cn=0,1",
-                "ch=2",
-                "txtvers=1",
-                "pw=false",
+                "txtvers=1", // always 1
+                "md=0,1,2",  // metadata type
+                "ss=16",     // sample size
+                "sr=44100",  // sample rate
+                "ch=2",      // channels
+                "et=0,1",    // encryption type
+                "cn=0,1",    // codec type
+                "pw=false",  // has password?
+                "tp=UDP",    // transport protocol
+                "vn=65537",  // required, unknown
             ],
         );
         let server = mdns::Server::new(vec![service]).unwrap();
