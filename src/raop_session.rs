@@ -43,8 +43,8 @@ impl RaopSession {
         };
 
         let result = session.rtsp_loop().await;
-        if let Err(e) = result {
-            info!("Connection closed, {}", e);
+        if result.is_err() {
+            info!("Connection closed");
         }
     }
 
