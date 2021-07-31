@@ -5,7 +5,7 @@ mod rtsp;
 mod sink;
 mod util;
 
-use std::{future::Future, sync::Arc};
+use std::future::Future;
 
 use anyhow::Result;
 use async_std::{
@@ -40,7 +40,7 @@ async fn main() -> Result<()> {
     let mac_address = get_mac_address()?.unwrap();
     debug!("Mac address: {}", mac_address);
 
-    let audio_sink: Arc<Box<dyn sink::AudioSink>> = Arc::new(sink::create(audio_sink));
+    let audio_sink = sink::create(audio_sink);
 
     let raop_join_handle = spawn(async move {
         serve(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 7000, |id, stream| {

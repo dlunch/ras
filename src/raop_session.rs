@@ -30,12 +30,12 @@ pub struct RaopSession {
     id: u32,
     stream: TcpStream,
     mac_address: MacAddress,
-    sink: Arc<Box<dyn AudioSink>>,
+    sink: Arc<dyn AudioSink>,
     stream_info: Option<StreamInfo>,
 }
 
 impl RaopSession {
-    pub async fn start(id: u32, stream: TcpStream, sink: Arc<Box<dyn AudioSink>>, mac_address: MacAddress) {
+    pub async fn start(id: u32, stream: TcpStream, sink: Arc<dyn AudioSink>, mac_address: MacAddress) {
         let mut session = Self {
             id,
             stream,
@@ -246,7 +246,7 @@ impl RaopSession {
         Ok(base64::encode(response).replace("=", ""))
     }
 
-    async fn rtp_loop(socket: UdpSocket, mut stream_info: StreamInfo, sink: Arc<Box<dyn AudioSink>>) -> Result<()> {
+    async fn rtp_loop(socket: UdpSocket, mut stream_info: StreamInfo, sink: Arc<dyn AudioSink>) -> Result<()> {
         let session = sink.start(stream_info.decoder.channels(), stream_info.decoder.rate(), stream_info.decoder.format())?;
 
         loop {

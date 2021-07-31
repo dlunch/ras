@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 mod dummy;
 mod rodio;
 
@@ -23,12 +25,12 @@ cfg_if::cfg_if! {
     }
 }
 
-pub fn create(sink: &str) -> Box<dyn AudioSink> {
+pub fn create(sink: &str) -> Arc<dyn AudioSink> {
     match sink {
         #[cfg(all(unix, not(target_os = "macos")))]
-        "pulseaudio" => Box::new(pulseaudio::PulseAudioSink::new()),
-        "dummy" => Box::new(dummy::DummyAudioSink::new()),
-        "rodio" => Box::new(rodio::RodioAudioSink::new()),
+        "pulseaudio" => Arc::new(pulseaudio::PulseAudioSink::new()),
+        "dummy" => Arc::new(dummy::DummyAudioSink::new()),
+        "rodio" => Arc::new(rodio::RodioAudioSink::new()),
         _ => panic!("Unknown sink"),
     }
 }
