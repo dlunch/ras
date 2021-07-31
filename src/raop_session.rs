@@ -20,14 +20,18 @@ use super::{
     sink::{AudioFormat, AudioSink},
 };
 
+struct StreamInfo {
+    rtp_type: u8,
+    decoder: Box<dyn Decoder>,
+    cipher: Option<Cbc<Aes128, ZeroPadding>>,
+}
+
 pub struct RaopSession {
     id: u32,
     stream: TcpStream,
     mac_address: MacAddress,
-    rtp_type: Option<u8>,
-    decoder: Option<Box<dyn Decoder>>,
     sink: Arc<Box<dyn AudioSink>>,
-    cipher: Option<Cbc<Aes128, ZeroPadding>>,
+    stream_info: Option<StreamInfo>,
 }
 
 impl RaopSession {
@@ -36,10 +40,8 @@ impl RaopSession {
             id,
             stream,
             mac_address,
-            rtp_type: None,
-            decoder: None,
             sink,
-            cipher: None,
+            stream_info: None,
         };
 
         let result = session.rtsp_loop().await;
@@ -132,24 +134,23 @@ impl RaopSession {
             let mut rtpmap_split = attribute_value("rtpmap")?.split_whitespace();
 
             let (rtp_type, codec) = (rtpmap_split.next()?, rtpmap_split.next()?);
-            self.rtp_type = Some(rtp_type.parse().ok()?);
 
             let codec_parameters = codec.split('/').collect::<Vec<_>>();
 
             debug!("codec: {:?}", codec);
-            match codec_parameters[0] {
+            let decoder: Box<dyn Decoder> = match codec_parameters[0] {
                 "AppleLossless" => {
                     // 96 352 0 16 40 10 14 2 255 0 0 44100
                     let fmtp_attr = attribute_value("fmtp")?;
                     let fmtp = &fmtp_attr[fmtp_attr.find(char::is_whitespace)? + 1..];
 
                     debug!("fmtp: {:?}", fmtp);
-                    self.decoder = Some(Box::new(AppleLoselessDecoder::new(fmtp).ok()?))
+                    Box::new(AppleLoselessDecoder::new(fmtp).ok()?)
                 }
                 "L16" => {
                     let rate = codec_parameters[1].parse().ok()?;
                     let channels = codec_parameters[2].parse().ok()?;
-                    self.decoder = Some(Box::new(RawPCMDecoder::new(AudioFormat::S16BE, channels, rate).ok()?))
+                    Box::new(RawPCMDecoder::new(AudioFormat::S16BE, channels, rate).ok()?)
                 }
                 unk => panic!("Unknown codec {:?}", unk),
             };
@@ -157,16 +158,26 @@ impl RaopSession {
             let rsaaeskey = attribute_value("rsaaeskey");
             let aesiv = attribute_value("aesiv");
 
-            if let Some(rsaaeskey) = rsaaeskey {
+            let cipher = if let Some(rsaaeskey) = rsaaeskey {
                 if let Some(aesiv) = aesiv {
                     let rsaaeskey = base64::decode(rsaaeskey).ok()?;
                     let aesiv = base64::decode(aesiv).ok()?;
 
                     debug!("key: {:?}, iv: {:?}", rsaaeskey, aesiv);
 
-                    self.init_cipher(&rsaaeskey, &aesiv).ok()?;
+                    Some(self.init_cipher(&rsaaeskey, &aesiv).ok()?)
+                } else {
+                    None
                 }
-            }
+            } else {
+                None
+            };
+
+            self.stream_info = Some(StreamInfo {
+                rtp_type: rtp_type.parse().ok()?,
+                decoder,
+                cipher,
+            });
 
             Some(Response::new(StatusCode::Ok))
         })();
@@ -198,11 +209,9 @@ impl RaopSession {
                 "Transport" => transport
             };
 
-            let rtp_type = self.rtp_type.take().ok_or_else(|| anyhow!("Invalid request"))?;
-            let decoder = self.decoder.take().ok_or_else(|| anyhow!("Invalid request"))?;
+            let stream_info = self.stream_info.take().ok_or_else(|| anyhow!("Invalid request"))?;
             let sink = self.sink.clone();
-            let cipher = self.cipher.take();
-            task::spawn(async move { Self::rtp_loop(rtp, rtp_type, decoder, sink, cipher).await.unwrap() });
+            task::spawn(async move { Self::rtp_loop(rtp, stream_info, sink).await.unwrap() });
 
             Ok(Response::with_headers(StatusCode::Ok, response_headers))
         } else {
@@ -210,16 +219,14 @@ impl RaopSession {
         }
     }
 
-    fn init_cipher(&mut self, rsaaeskey: &[u8], aesiv: &[u8]) -> Result<()> {
+    fn init_cipher(&mut self, rsaaeskey: &[u8], aesiv: &[u8]) -> Result<Cbc<Aes128, ZeroPadding>> {
         let key = pem::parse(include_str!("airport_express.key"))?;
         let private_key = RSAPrivateKey::from_pkcs1(&key.contents)?;
 
         let aeskey = private_key.decrypt(PaddingScheme::new_oaep::<sha1::Sha1>(), rsaaeskey)?;
-        let cipher = Cbc::<Aes128, ZeroPadding>::new_from_slices(&aeskey, aesiv).unwrap();
+        let cipher = Cbc::<Aes128, ZeroPadding>::new_from_slices(&aeskey, aesiv)?;
 
-        self.cipher = Some(cipher);
-
-        Ok(())
+        Ok(cipher)
     }
 
     fn apple_response(&self, apple_challenge: &str) -> Result<String> {
@@ -239,14 +246,8 @@ impl RaopSession {
         Ok(base64::encode(response).replace("=", ""))
     }
 
-    async fn rtp_loop(
-        socket: UdpSocket,
-        rtp_type: u8,
-        mut decoder: Box<dyn Decoder>,
-        sink: Arc<Box<dyn AudioSink>>,
-        cipher: Option<Cbc<Aes128, ZeroPadding>>,
-    ) -> Result<()> {
-        let session = sink.start(decoder.channels(), decoder.rate(), decoder.format())?;
+    async fn rtp_loop(socket: UdpSocket, mut stream_info: StreamInfo, sink: Arc<Box<dyn AudioSink>>) -> Result<()> {
+        let session = sink.start(stream_info.decoder.channels(), stream_info.decoder.rate(), stream_info.decoder.format())?;
 
         loop {
             let mut buf = [0; 2048];
@@ -254,15 +255,15 @@ impl RaopSession {
 
             let rtp = RtpReader::new(&buf[..len]).map_err(|x| anyhow::Error::msg(format!("Can't read rtp packet {:?}", x)))?;
 
-            if rtp.payload_type() == rtp_type {
-                let payload = if let Some(cipher) = &cipher {
+            if rtp.payload_type() == stream_info.rtp_type {
+                let payload = if let Some(cipher) = &stream_info.cipher {
                     let mut decrypted = rtp.payload().to_vec();
                     let cipher = cipher.clone();
                     cipher.decrypt(&mut decrypted[..rtp.payload().len() & !0xf])?;
 
-                    decoder.decode(&decrypted)?
+                    stream_info.decoder.decode(&decrypted)?
                 } else {
-                    decoder.decode(rtp.payload())?
+                    stream_info.decoder.decode(rtp.payload())?
                 };
 
                 session.write(&payload)?;
