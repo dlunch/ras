@@ -5,7 +5,7 @@ authors = ["Inseok Lee <dlunch@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-async-std = { version = "^1.9", features = ["attributes", "unstable"] }
+async-std = { version = "^1.10", features = ["attributes", "unstable"] }
 futures = { version = "^0.3" }
 maplit = { version = "^1.0" }
 pretty_env_logger = { version = "^0.4" }
