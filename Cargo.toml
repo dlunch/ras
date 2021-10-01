@@ -23,8 +23,7 @@ rodio = { version = "^0.14", default-features = false }
 anyhow = { version = "^1.0" }
 sdp = { version = "^0.2" }
 base64 = { version = "^0.13" }
-rsa = { version = "^0.4" }
-pem = { version = "^0.8" }
+rsa = { version = "^0.5" }
 sha-1 = { version = "^0.9" }
 aes = { version = "^0.7" }
 block-modes = { version = "^0.8" }
