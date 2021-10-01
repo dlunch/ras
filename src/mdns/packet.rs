@@ -272,8 +272,8 @@ pub struct Question {
 }
 
 impl Question {
-    fn parse(mut stream: &mut ReadStream) -> Result<Self> {
-        let name = Name::parse(&mut stream)?;
+    fn parse(stream: &mut ReadStream) -> Result<Self> {
+        let name = Name::parse(stream)?;
 
         let r#type = stream.read_u16();
         let class = stream.read_u16();
@@ -288,11 +288,11 @@ impl Question {
         })
     }
 
-    fn write(&self, mut stream: &mut WriteStream) {
-        self.name.write(&mut stream);
+    fn write(&self, stream: &mut WriteStream) {
+        self.name.write(stream);
 
-        self.r#type.write(&mut stream);
-        self.class.write(&mut stream);
+        self.r#type.write(stream);
+        self.class.write(stream);
     }
 }
 
@@ -307,13 +307,13 @@ pub enum ResourceRecordData {
 }
 
 impl ResourceRecordData {
-    fn parse(r#type: ResourceType, mut stream: &mut ReadStream) -> Result<Self> {
+    fn parse(r#type: ResourceType, stream: &mut ReadStream) -> Result<Self> {
         let length = stream.read_u16() as usize;
 
         Ok(match r#type {
             ResourceType::A => Self::A(Ipv4Addr::from(stream.read_u32())),
             ResourceType::AAAA => Self::AAAA(Ipv6Addr::from(stream.read_u128())),
-            ResourceType::PTR => Self::PTR(Name::parse(&mut stream)?),
+            ResourceType::PTR => Self::PTR(Name::parse(stream)?),
             ResourceType::TXT => {
                 let mut txt = Vec::new();
                 let end = stream.cursor + length;
@@ -332,7 +332,7 @@ impl ResourceRecordData {
                 priority: stream.read_u16(),
                 weight: stream.read_u16(),
                 port: stream.read_u16(),
-                target: Name::parse(&mut stream)?,
+                target: Name::parse(stream)?,
             },
             x => Self::Unknown {
                 r#type: x,
@@ -406,26 +406,26 @@ impl ResourceRecord {
         }
     }
 
-    fn parse(mut stream: &mut ReadStream) -> Result<Self> {
-        let name = Name::parse(&mut stream)?;
+    fn parse(stream: &mut ReadStream) -> Result<Self> {
+        let name = Name::parse(stream)?;
 
         let r#type = ResourceType::parse(stream.read_u16());
         let class = Class::parse(stream.read_u16());
         let ttl = stream.read_u32();
 
-        let data = ResourceRecordData::parse(r#type, &mut stream)?;
+        let data = ResourceRecordData::parse(r#type, stream)?;
 
         Ok(ResourceRecord { name, class, ttl, data })
     }
 
-    fn write(&self, mut stream: &mut WriteStream) {
-        self.name.write(&mut stream);
+    fn write(&self, stream: &mut WriteStream) {
+        self.name.write(stream);
 
-        self.data.r#type().write(&mut stream);
-        self.class.write(&mut stream);
+        self.data.r#type().write(stream);
+        self.class.write(stream);
         stream.write_u32(self.ttl as u32);
 
-        self.data.write(&mut stream);
+        self.data.write(stream);
     }
 }
 
