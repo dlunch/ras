@@ -10,7 +10,7 @@ use block_modes::{block_padding::ZeroPadding, BlockMode, Cbc};
 use log::{debug, info, trace, warn};
 use mac_address::MacAddress;
 use maplit::hashmap;
-use rsa::{PaddingScheme, RSAPrivateKey};
+use rsa::{pkcs1::FromRsaPrivateKey, PaddingScheme, RsaPrivateKey};
 use rtp_rs::RtpReader;
 use sdp::session_description::SessionDescription;
 
@@ -220,8 +220,7 @@ impl RaopSession {
     }
 
     fn init_cipher(&mut self, rsaaeskey: &[u8], aesiv: &[u8]) -> Result<Cbc<Aes128, ZeroPadding>> {
-        let key = pem::parse(include_str!("airport_express.key"))?;
-        let private_key = RSAPrivateKey::from_pkcs1(&key.contents)?;
+        let private_key = RsaPrivateKey::from_pkcs1_pem(include_str!("airport_express.key"))?;
 
         let aeskey = private_key.decrypt(PaddingScheme::new_oaep::<sha1::Sha1>(), rsaaeskey)?;
         let cipher = Cbc::<Aes128, ZeroPadding>::new_from_slices(&aeskey, aesiv)?;
@@ -239,8 +238,7 @@ impl RaopSession {
         }
         challenge.extend_from_slice(&self.mac_address.bytes());
 
-        let key = pem::parse(include_str!("airport_express.key"))?;
-        let private_key = RSAPrivateKey::from_pkcs1(&key.contents)?;
+        let private_key = RsaPrivateKey::from_pkcs1_pem(include_str!("airport_express.key"))?;
         let response = private_key.sign(PaddingScheme::new_pkcs1v15_sign(None), &challenge)?;
 
         Ok(base64::encode(response).replace("=", ""))
