@@ -22,6 +22,8 @@ impl Request {
             let mut line = String::new();
             reader.read_line(&mut line).await?;
 
+            line = line.trim_end().to_string();
+
             if line.is_empty() {
                 break;
             }
