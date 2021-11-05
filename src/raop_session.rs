@@ -1,11 +1,12 @@
-use std::{io, str, sync::Arc};
+use std::{
+    io,
+    net::{IpAddr, Ipv4Addr, SocketAddrV4},
+    str,
+    sync::Arc,
+};
 
 use aes::Aes128;
 use anyhow::{anyhow, Result};
-use async_std::{
-    net::{IpAddr, Ipv4Addr, SocketAddrV4, TcpStream, UdpSocket},
-    task,
-};
 use block_modes::{block_padding::ZeroPadding, BlockMode, Cbc};
 use log::{debug, info, trace, warn};
 use mac_address::MacAddress;
@@ -13,6 +14,10 @@ use maplit::hashmap;
 use rsa::{pkcs1::FromRsaPrivateKey, PaddingScheme, RsaPrivateKey};
 use rtp_rs::RtpReader;
 use sdp::session_description::SessionDescription;
+use tokio::{
+    net::{TcpStream, UdpSocket},
+    task,
+};
 
 use super::{
     decoder::{AppleLoselessDecoder, Decoder, RawPCMDecoder},

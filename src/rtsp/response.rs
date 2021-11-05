@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use async_std::io::{self, prelude::WriteExt};
+use tokio::io::{self, AsyncWrite, AsyncWriteExt};
 
 #[derive(Clone, Copy)]
 pub enum StatusCode {
@@ -42,7 +42,7 @@ impl Response {
 
     pub async fn write<S>(&self, mut stream: S) -> io::Result<()>
     where
-        S: io::Write + Unpin,
+        S: AsyncWrite + Unpin,
     {
         let mut result = Vec::with_capacity(256);
         result.extend(format!("RTSP/1.0 {} {}\r\n", self.status as usize, self.status.as_string()).as_bytes());
@@ -66,7 +66,7 @@ mod test {
     use maplit::hashmap;
     use std::str;
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_simple_response() -> Result<()> {
         let response = Response::with_headers(StatusCode::Ok, hashmap! { "Test" => "Test".into() });
 

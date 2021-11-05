@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 
 use anyhow::{anyhow, Result};
-use async_std::io::{self, prelude::BufReadExt, BufReader, ReadExt};
-use futures::{future, stream::TryStreamExt};
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, BufReader};
 
 pub struct Request {
     pub method: String,
@@ -14,15 +13,21 @@ pub struct Request {
 impl Request {
     pub async fn parse<S>(stream: S) -> Result<Self>
     where
-        S: io::Read + Unpin,
+        S: AsyncRead + Unpin,
     {
         let mut reader = BufReader::new(stream);
-        let lines = reader
-            .by_ref()
-            .lines()
-            .try_take_while(|x| future::ready(Ok(!x.is_empty())))
-            .try_collect::<Vec<_>>()
-            .await?;
+
+        let mut lines = Vec::new();
+        loop {
+            let mut line = String::new();
+            reader.read_line(&mut line).await?;
+
+            if line.is_empty() {
+                break;
+            }
+
+            lines.push(line);
+        }
 
         if lines.len() < 2 {
             return Err(anyhow!("Buffer too short"));
@@ -65,7 +70,7 @@ impl Request {
 mod test {
     use super::*;
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_simple_request() -> Result<()> {
         let data = "GET /info RTSP/1.0\r\nX-Apple-ProtocolVersion: 1\r\nCSeq: 0\r\n\r\n";
 
