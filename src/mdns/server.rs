@@ -6,10 +6,10 @@ use std::{
 };
 
 use anyhow::{anyhow, Result};
-use async_std::{net::UdpSocket, task::spawn_blocking};
 use cidr_utils::cidr::Ipv4Cidr;
 use log::{debug, trace};
 use multicast_socket::{all_ipv4_interfaces, Message, MulticastOptions, MulticastSocket};
+use tokio::{net::UdpSocket, task::spawn_blocking};
 
 use super::packet::{Name, Packet, ResourceRecord, ResourceRecordData, ResourceType};
 use super::Service;
@@ -109,7 +109,7 @@ impl Server {
                 }
                 return result;
             })
-            .await?;
+            .await??;
             trace!("receive from {}, raw {:?}", message.origin_address, message.data);
 
             if let Some((unicast_response, multicast_response)) = self.handle_packet(&message) {

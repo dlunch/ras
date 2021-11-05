@@ -5,7 +5,8 @@ authors = ["Inseok Lee <dlunch@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-async-std = { version = "^1.9", features = ["attributes", "unstable"] }
+tokio = { version = "^1.12", features = ["full"] }
+tokio-stream = { version = "^0.1", features = ["io-util", "net"]}
 futures = { version = "^0.3" }
 maplit = { version = "^1.0" }
 pretty_env_logger = { version = "^0.4" }

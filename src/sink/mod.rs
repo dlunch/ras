@@ -1,7 +1,7 @@
-use std::sync::Arc;
-
 mod dummy;
 mod rodio;
+
+use std::sync::Arc;
 
 use anyhow::Result;
 

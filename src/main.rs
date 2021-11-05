@@ -5,20 +5,23 @@ mod rtsp;
 mod sink;
 mod util;
 
-use std::future::Future;
+use std::{
+    future::Future,
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+};
 
 use anyhow::Result;
-use async_std::{
-    net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener, TcpStream},
-    stream::StreamExt,
-    task::spawn,
-};
 use clap::{App, Arg};
-use futures::future::try_join_all;
+use futures::{future::try_join_all, StreamExt};
 use log::debug;
 use mac_address::get_mac_address;
+use tokio::{
+    net::{TcpListener, TcpStream},
+    task::spawn,
+};
+use tokio_stream::wrappers::TcpListenerStream;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<()> {
     pretty_env_logger::init();
 
@@ -81,7 +84,7 @@ where
     F: Future<Output = ()> + Send + 'static,
 {
     let listener = TcpListener::bind(SocketAddr::new(ip, port)).await?;
-    let mut incoming = listener.incoming();
+    let mut incoming = TcpListenerStream::new(listener);
 
     let mut id = 1;
     while let Some(stream) = incoming.next().await {
