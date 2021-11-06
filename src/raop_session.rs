@@ -101,7 +101,10 @@ impl RaopSession {
                 response.headers.insert("CSeq", cseq.into());
             }
             if let Some(apple_challenge) = apple_challenge {
-                response.headers.insert("Apple-Response", self.apple_response(apple_challenge).unwrap());
+                response.headers.insert(
+                    "Apple-Response",
+                    Self::apple_response(self.stream.local_addr().unwrap().ip(), &self.mac_address.bytes(), apple_challenge).unwrap(),
+                );
             }
             response.headers.insert("Server", "ras/0.1".into());
 
@@ -233,15 +236,14 @@ impl RaopSession {
         Ok(cipher)
     }
 
-    fn apple_response(&self, apple_challenge: &str) -> Result<String> {
+    fn apple_response(local_addr: IpAddr, mac_address: &[u8], apple_challenge: &str) -> Result<String> {
         let mut challenge = base64::decode(apple_challenge).unwrap();
 
-        let local_addr = self.stream.local_addr().unwrap();
-        match local_addr.ip() {
+        match local_addr {
             IpAddr::V4(ip) => challenge.extend_from_slice(&ip.octets()),
             IpAddr::V6(ip) => challenge.extend_from_slice(&ip.octets()),
         }
-        challenge.extend_from_slice(&self.mac_address.bytes());
+        challenge.extend_from_slice(mac_address);
 
         let private_key = RsaPrivateKey::from_pkcs1_pem(include_str!("airport_express.key"))?;
         let response = private_key.sign(PaddingScheme::new_pkcs1v15_sign(None), &challenge)?;
@@ -272,5 +274,22 @@ impl RaopSession {
                 session.write(&payload)?;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[tokio::test]
+    async fn apple_challenge_test() -> Result<()> {
+        let addr = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1));
+        let mac_addr = [0x00, 0x11, 0x22, 0x33, 0x44, 0x55];
+
+        let apple_response = RaopSession::apple_response(addr, &mac_addr, "test")?;
+
+        assert_eq!(apple_response, "O5TD24VQqAKIdTjPfoZzAJIrJo0Vc3gXzVAy18cWSLGN9ckUjjSWs5YCPkSmN3ExPCq2FTHtCYMW03p27K5zav97hETnJ7yLznE7cVc1RztWk0msX4MmSoN84Ei9hKDAALq/e68d6OWU+0sSX0cYcRLegkNLiCt2fNT9DnLV3PPNfBOh6bZ+PKIlqeTdAdzm73t6Lz5CBNbM7E7M/faE03XJiQHIjRylKoXRDRLwImuz8l8rWxjBjWhmcKoBbjmk1X1ohSeZWkx0ie9ySQJYyTk2PlrPFTTdA2DFrGNEIHvxPbQ94Sr5oF5lUjNaXMj2dLidRu8sQWWrhUqCkGd3JQ");
+
+        Ok(())
     }
 }
