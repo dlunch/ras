@@ -30,7 +30,7 @@ aes = { version = "^0.7" }
 block-modes = { version = "^0.8" }
 
 [target.'cfg(windows)'.dependencies]
-ipconfig = { version = "^0.2" }
+ipconfig = { version = "^0.3" }
 
 [target.'cfg(unix)'.dependencies]
 get_if_addrs = { version = "^0.5" }
