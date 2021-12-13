@@ -13,7 +13,7 @@ use std::{
 use anyhow::Result;
 use clap::{App, Arg};
 use futures::{future::try_join_all, StreamExt};
-use log::debug;
+use log::{debug, error};
 use mac_address::get_mac_address;
 use tokio::{
     net::{TcpListener, TcpStream},
@@ -46,10 +46,16 @@ async fn main() -> Result<()> {
     let audio_sink = sink::create(audio_sink);
 
     let raop_join_handle = spawn(async move {
-        serve(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 7000, |id, stream| {
+        let result = serve(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 7000, |id, stream| {
             raop_session::RaopSession::start(id, stream, audio_sink.clone(), mac_address)
         })
-        .await
+        .await;
+
+        if let Err(e) = &result {
+            error!("{}", e);
+        }
+
+        result
     });
 
     let mdns_join_handle = spawn(async move {
