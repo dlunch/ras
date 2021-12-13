@@ -27,6 +27,8 @@ struct Args {
     server_name: String,
     #[clap(long, default_value = "rodio")]
     audio_sink: String,
+    #[clap(long, default_value_t = 7000)]
+    port: u16,
 }
 
 #[tokio::main]
@@ -41,7 +43,7 @@ async fn main() -> Result<()> {
     let audio_sink = sink::create(&args.audio_sink);
 
     let raop_join_handle = spawn(async move {
-        let result = serve(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 7000, |id, stream| {
+        let result = serve(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), args.port, |id, stream| {
             raop_session::RaopSession::start(id, stream, audio_sink.clone(), mac_address)
         })
         .await;
@@ -57,7 +59,7 @@ async fn main() -> Result<()> {
         let service = mdns::Service::new(
             "_raop._tcp",
             &format!("{}@{}", mac_address.to_string().replace(":", ""), args.server_name),
-            7000,
+            args.port,
             vec![
                 "txtvers=1", // always 1
                 "md=0,1,2",  // metadata type
