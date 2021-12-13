@@ -21,7 +21,7 @@ use tokio::{
 };
 use tokio_stream::wrappers::TcpListenerStream;
 
-#[derive(Parser)]
+#[derive(Parser, Debug)]
 struct Args {
     #[clap(long, default_value = "ras")]
     server_name: String,
@@ -36,6 +36,8 @@ async fn main() -> Result<()> {
     pretty_env_logger::init();
 
     let args = Args::parse();
+
+    debug!("{:?}", args);
 
     let mac_address = get_mac_address()?.unwrap();
     debug!("Mac address: {}", mac_address);
