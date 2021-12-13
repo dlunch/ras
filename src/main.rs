@@ -11,7 +11,7 @@ use std::{
 };
 
 use anyhow::Result;
-use clap::{App, Arg};
+use clap::Parser;
 use futures::{future::try_join_all, StreamExt};
 use log::{debug, error};
 use mac_address::get_mac_address;
@@ -21,29 +21,24 @@ use tokio::{
 };
 use tokio_stream::wrappers::TcpListenerStream;
 
+#[derive(Parser)]
+struct Args {
+    #[clap(long, default_value = "ras")]
+    server_name: String,
+    #[clap(long, default_value = "rodio")]
+    audio_sink: String,
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     pretty_env_logger::init();
 
-    let matches = App::new("ras")
-        .arg(Arg::with_name("server_name").long("server_name").default_value("ras"))
-        .arg(Arg::with_name("audio_sink").long("audio_sink").default_value("rodio").possible_values(&[
-            "rodio",
-            #[cfg(all(unix, not(target_os = "macos")))]
-            "pulseaudio",
-            "dummy",
-        ]))
-        .get_matches();
-
-    let server_name = matches.value_of("server_name").unwrap().to_owned();
-    let audio_sink = matches.value_of("audio_sink").unwrap();
-
-    debug!("{:?}", matches);
+    let args = Args::parse();
 
     let mac_address = get_mac_address()?.unwrap();
     debug!("Mac address: {}", mac_address);
 
-    let audio_sink = sink::create(audio_sink);
+    let audio_sink = sink::create(&args.audio_sink);
 
     let raop_join_handle = spawn(async move {
         let result = serve(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 7000, |id, stream| {
@@ -61,7 +56,7 @@ async fn main() -> Result<()> {
     let mdns_join_handle = spawn(async move {
         let service = mdns::Service::new(
             "_raop._tcp",
-            &format!("{}@{}", mac_address.to_string().replace(":", ""), server_name),
+            &format!("{}@{}", mac_address.to_string().replace(":", ""), args.server_name),
             7000,
             vec![
                 "txtvers=1", // always 1
