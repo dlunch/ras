@@ -1528,12 +1528,12 @@ checksum = "d29ab0c6d3fc0ee92fe66e2d99f700eab17a8d57d1c1d3b748380fb20baa78cd"
 
 [[package]]
 name = "sdp"
-version = "0.2.3"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd0418738c6c607171cb38e5767c451c7dbd9e139d06833793fd49361198a57d"
+checksum = "4e827f668934c93141164557c10a4064bb0ae6b22ec1371293e56a92654d3809"
 dependencies = [
- "anyhow",
  "rand",
+ "substring",
  "thiserror",
  "url",
 ]
@@ -1627,6 +1627,15 @@ name = "strsim"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
+
+[[package]]
+name = "substring"
+version = "1.4.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "42ee6433ecef213b2e72f587ef64a2f5943e7cd16fbd82dbe8bc07486c534c86"
+dependencies = [
+ "autocfg 1.0.1",
+]
 
 [[package]]
 name = "subtle"
