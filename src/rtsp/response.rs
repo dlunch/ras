@@ -54,7 +54,7 @@ impl Response {
         }
         result.extend("\r\n".as_bytes());
 
-        stream.write(&result).await?;
+        stream.write_all(&result).await?;
         Ok(())
     }
 }
