@@ -243,11 +243,9 @@ impl RaopSession {
         let mut cipher = cipher.clone();
 
         let mut decrypted = raw.to_vec();
-        (0..raw.len()).step_by(16).for_each(|x| {
-            if x + 16 <= raw.len() {
-                let block = Block::from_mut_slice(&mut decrypted[x..x + 16]);
-                cipher.decrypt_block_mut(block);
-            }
+        decrypted.chunks_exact_mut(16).for_each(|x| {
+            let block = Block::from_mut_slice(x);
+            cipher.decrypt_block_mut(block);
         });
 
         Ok(decrypted)
