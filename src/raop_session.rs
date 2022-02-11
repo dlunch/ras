@@ -5,15 +5,18 @@ use std::{
     sync::Arc,
 };
 
-use aes::Aes128;
+use aes::{
+    cipher::{BlockDecryptMut, KeyIvInit},
+    Aes128, Block,
+};
 use anyhow::{anyhow, Result};
-use block_modes::{block_padding::ZeroPadding, BlockMode, Cbc};
+use cbc::Decryptor;
 use log::{debug, info, trace, warn};
 use mac_address::MacAddress;
 use maplit::hashmap;
 use rsa::{pkcs1::FromRsaPrivateKey, PaddingScheme, RsaPrivateKey};
 use rtp_rs::RtpReader;
-use sdp::session_description::SessionDescription;
+use sdp::SessionDescription;
 use tokio::{
     net::{TcpStream, UdpSocket},
     task,
@@ -28,7 +31,7 @@ use super::{
 struct StreamInfo {
     rtp_type: u8,
     decoder: Box<dyn Decoder>,
-    cipher: Option<Cbc<Aes128, ZeroPadding>>,
+    cipher: Option<Decryptor<Aes128>>,
 }
 
 pub struct RaopSession {
@@ -171,7 +174,7 @@ impl RaopSession {
                     let rsaaeskey = base64::decode(rsaaeskey).ok()?;
                     let aesiv = base64::decode(aesiv).ok()?;
 
-                    println!("key: {:?}, iv: {:?}", rsaaeskey, aesiv);
+                    debug!("key: {:?}, iv: {:?}", rsaaeskey, aesiv);
 
                     Some(Self::init_cipher(&rsaaeskey, &aesiv).ok()?)
                 } else {
@@ -227,21 +230,25 @@ impl RaopSession {
         }
     }
 
-    fn init_cipher(rsaaeskey: &[u8], aesiv: &[u8]) -> Result<Cbc<Aes128, ZeroPadding>> {
+    fn init_cipher(rsaaeskey: &[u8], aesiv: &[u8]) -> Result<Decryptor<Aes128>> {
         let private_key = RsaPrivateKey::from_pkcs1_pem(include_str!("airport_express.key"))?;
 
         let aeskey = private_key.decrypt(PaddingScheme::new_oaep::<sha1::Sha1>(), rsaaeskey)?;
-        let cipher = Cbc::<Aes128, ZeroPadding>::new_from_slices(&aeskey, aesiv)?;
+        let cipher = Decryptor::<Aes128>::new_from_slices(&aeskey, aesiv).unwrap();
 
         Ok(cipher)
     }
 
-    fn decrypt(cipher: &Cbc<Aes128, ZeroPadding>, raw: &[u8]) -> Result<Vec<u8>> {
+    fn decrypt(cipher: &Decryptor<Aes128>, raw: &[u8]) -> Result<Vec<u8>> {
+        let mut cipher = cipher.clone();
+
         let mut decrypted = raw.to_vec();
-        let cipher = cipher.clone();
-        println!("{:?}", raw);
-        cipher.decrypt(&mut decrypted[..raw.len() & !0xf])?;
-        println!("{:?}", decrypted);
+        (0..raw.len()).step_by(16).for_each(|x| {
+            if x + 16 <= raw.len() {
+                let block = Block::from_mut_slice(&mut decrypted[x..x + 16]);
+                cipher.decrypt_block_mut(block);
+            }
+        });
 
         Ok(decrypted)
     }
