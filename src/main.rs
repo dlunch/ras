@@ -60,7 +60,7 @@ async fn main() -> Result<()> {
     let mdns_join_handle = spawn(async move {
         let service = mdns::Service::new(
             "_raop._tcp",
-            &format!("{}@{}", mac_address.to_string().replace(":", ""), args.server_name),
+            &format!("{}@{}", mac_address.to_string().replace(':', ""), args.server_name),
             args.port,
             vec![
                 "txtvers=1", // always 1

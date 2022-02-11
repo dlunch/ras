@@ -265,7 +265,7 @@ impl RaopSession {
         let private_key = RsaPrivateKey::from_pkcs1_pem(include_str!("airport_express.key"))?;
         let response = private_key.sign(PaddingScheme::new_pkcs1v15_sign(None), &challenge)?;
 
-        Ok(base64::encode(response).replace("=", ""))
+        Ok(base64::encode(response).replace('=', ""))
     }
 
     async fn rtp_loop(socket: UdpSocket, mut stream_info: StreamInfo, sink: Arc<dyn AudioSink>) -> Result<()> {
