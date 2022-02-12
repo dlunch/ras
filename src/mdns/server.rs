@@ -119,7 +119,7 @@ impl Server {
                     trace!("sending response to {:?}, raw {:?}", message.origin_address, response);
 
                     // MulticastSocket doesn't exposes raw socket to us
-                    let response_socket = UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 0)).await?;
+                    let response_socket = UdpSocket::bind("0.0.0.0:0").await?;
                     response_socket.send_to(&response, message.origin_address).await?;
                 }
 
