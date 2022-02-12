@@ -1,9 +1,4 @@
-use std::{
-    io,
-    net::{IpAddr, Ipv4Addr, SocketAddrV4},
-    str,
-    sync::Arc,
-};
+use std::{io, net::IpAddr, str, sync::Arc};
 
 use aes::{
     cipher::{BlockDecryptMut, KeyIvInit},
@@ -192,9 +187,9 @@ impl RaopSession {
         if let Some(client_transport) = request.headers.get("Transport") {
             debug!("client_transport: {:?}", client_transport);
 
-            let rtp = UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 0)).await?;
-            let control = UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 0)).await?;
-            let timing = UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 0)).await?;
+            let rtp = UdpSocket::bind("0.0.0.0:0").await?;
+            let control = UdpSocket::bind("0.0.0.0:0").await?;
+            let timing = UdpSocket::bind("0.0.0.0:0").await?;
 
             let transport = format!(
                 "RTP/AVP/UDP;unicast;mode=record;server_port={};control_port={};timing_port={}",
@@ -281,6 +276,8 @@ impl RaopSession {
 #[cfg(test)]
 mod test {
     use super::*;
+
+    use std::net::{IpAddr, Ipv4Addr};
 
     #[tokio::test]
     async fn apple_challenge_test() -> Result<()> {
