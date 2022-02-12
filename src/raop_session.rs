@@ -134,43 +134,31 @@ impl RaopSession {
                 return None;
             }
 
-            // We can't use Codec structure because its fields are private as of sdp 0.2.1
-            // let codec = sdp.get_codec_for_payload_type(96).ok()?;
-            // debug!("codec: {:?}", codec);
-
+            let codec = sdp.get_codec_for_payload_type(96).ok()?;
             let media_description = &sdp.media_descriptions[0];
-            let attribute_value = |attr: &str| media_description.attributes.iter().find(|&x| x.key == attr)?.value.as_ref();
-
-            // 96 AppleLossless
-            let mut rtpmap_split = attribute_value("rtpmap")?.split_whitespace();
-
-            let (rtp_type, codec) = (rtpmap_split.next()?, rtpmap_split.next()?);
-
-            let codec_parameters = codec.split('/').collect::<Vec<_>>();
 
             debug!("codec: {:?}", codec);
-            let decoder: Box<dyn Decoder> = match codec_parameters[0] {
+            let decoder: Box<dyn Decoder> = match codec.name.as_str() {
                 "AppleLossless" => {
-                    // 96 352 0 16 40 10 14 2 255 0 0 44100
-                    let fmtp_attr = attribute_value("fmtp")?;
-                    let fmtp = &fmtp_attr[fmtp_attr.find(char::is_whitespace)? + 1..];
+                    // we can't use codec.fmtp here because
+                    // https://github.com/webrtc-rs/sdp/blob/v0.5.0/src/util/mod.rs#L148 doesn't work if fmtp has whitespaces
+                    let fmtp = media_description.attribute("fmtp")??.split_once(' ')?.1;
 
                     debug!("fmtp: {:?}", fmtp);
                     Box::new(AppleLoselessDecoder::new(fmtp).ok()?)
                 }
                 "L16" => {
-                    let rate = codec_parameters[1].parse().ok()?;
-                    let channels = codec_parameters[2].parse().ok()?;
-                    Box::new(RawPCMDecoder::new(AudioFormat::S16BE, channels, rate).ok()?)
+                    let channels = codec.encoding_parameters.parse().ok()?;
+                    Box::new(RawPCMDecoder::new(AudioFormat::S16BE, channels, codec.clock_rate).ok()?)
                 }
                 unk => panic!("Unknown codec {:?}", unk),
             };
 
-            let rsaaeskey = attribute_value("rsaaeskey");
-            let aesiv = attribute_value("aesiv");
+            let rsaaeskey = media_description.attribute("rsaaeskey");
+            let aesiv = media_description.attribute("aesiv");
 
-            let cipher = if let Some(rsaaeskey) = rsaaeskey {
-                if let Some(aesiv) = aesiv {
+            let cipher = if let Some(Some(rsaaeskey)) = rsaaeskey {
+                if let Some(Some(aesiv)) = aesiv {
                     let rsaaeskey = base64::decode(rsaaeskey).ok()?;
                     let aesiv = base64::decode(aesiv).ok()?;
 
@@ -185,7 +173,7 @@ impl RaopSession {
             };
 
             self.stream_info = Some(StreamInfo {
-                rtp_type: rtp_type.parse().ok()?,
+                rtp_type: codec.payload_type,
                 decoder,
                 cipher,
             });
