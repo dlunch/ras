@@ -25,7 +25,7 @@ anyhow = { version = "^1.0" }
 sdp = { version = "^0.5.1" }
 base64 = { version = "^0.13" }
 rsa = { version = "^0.5" }
-sha-1 = { version = "^0.9" }
+sha-1 = { version = "^0.10" }
 aes = { version = "^0.8" }
 cbc = { version = "^0.1" }
 lazy_static = { version = "^1.4" }
