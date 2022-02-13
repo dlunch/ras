@@ -28,6 +28,7 @@ rsa = { version = "^0.5" }
 sha-1 = { version = "^0.9" }
 aes = { version = "^0.8" }
 cbc = { version = "^0.1" }
+lazy_static = { version = "^1.4" }
 
 [target.'cfg(windows)'.dependencies]
 ipconfig = { version = "^0.3" }

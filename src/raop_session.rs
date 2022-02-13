@@ -23,6 +23,10 @@ use super::{
     sink::{AudioFormat, AudioSink},
 };
 
+lazy_static::lazy_static! {
+    static ref AIRPORT_EXPRESS_KEY: RsaPrivateKey = RsaPrivateKey::from_pkcs1_pem(include_str!("airport_express.key")).unwrap();
+}
+
 struct StreamInfo {
     rtp_type: u8,
     decoder: Box<dyn Decoder>,
@@ -214,9 +218,7 @@ impl RaopSession {
     }
 
     fn init_cipher(rsaaeskey: &[u8], aesiv: &[u8]) -> Result<Decryptor<Aes128>> {
-        let private_key = RsaPrivateKey::from_pkcs1_pem(include_str!("airport_express.key"))?;
-
-        let aeskey = private_key.decrypt(PaddingScheme::new_oaep::<sha1::Sha1>(), rsaaeskey)?;
+        let aeskey = AIRPORT_EXPRESS_KEY.decrypt(PaddingScheme::new_oaep::<sha1::Sha1>(), rsaaeskey)?;
         let cipher = Decryptor::<Aes128>::new_from_slices(&aeskey, aesiv).unwrap();
 
         Ok(cipher)
@@ -243,8 +245,7 @@ impl RaopSession {
         }
         challenge.extend_from_slice(mac_address);
 
-        let private_key = RsaPrivateKey::from_pkcs1_pem(include_str!("airport_express.key"))?;
-        let response = private_key.sign(PaddingScheme::new_pkcs1v15_sign(None), &challenge)?;
+        let response = AIRPORT_EXPRESS_KEY.sign(PaddingScheme::new_pkcs1v15_sign(None), &challenge)?;
 
         Ok(base64::encode(response).replace('=', ""))
     }

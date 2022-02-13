@@ -1446,6 +1446,7 @@ dependencies = [
  "get_if_addrs",
  "hostname",
  "ipconfig",
+ "lazy_static",
  "libpulse-binding",
  "libpulse-simple-binding",
  "log",
