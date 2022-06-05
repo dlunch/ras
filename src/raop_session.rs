@@ -9,7 +9,7 @@ use cbc::Decryptor;
 use log::{debug, info, trace, warn};
 use mac_address::MacAddress;
 use maplit::hashmap;
-use rsa::{pkcs1::FromRsaPrivateKey, PaddingScheme, RsaPrivateKey};
+use rsa::{pkcs1::DecodeRsaPrivateKey, PaddingScheme, RsaPrivateKey};
 use rtp_rs::RtpReader;
 use sdp::SessionDescription;
 use tokio::{
