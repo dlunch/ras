@@ -23,11 +23,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "alac"
-version = "0.5.1"
-source = "git+https://github.com/dlunch/alac.rs#99f61c0bc80fb2f105e44fe5b9150fbcbf5b5ca6"
-
-[[package]]
 name = "alsa"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -54,6 +49,12 @@ name = "anyhow"
 version = "1.0.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ee10e43ae4a853c0a3591d4e2ada1719e553be18199d9da9d4a83f5927c2f5c7"
+
+[[package]]
+name = "arrayvec"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8da52d66c7071e2e3fa2a1e5c6d088fec47b593032b254f5e980de8ea54454d6"
 
 [[package]]
 name = "atty"
@@ -138,6 +139,12 @@ name = "bumpalo"
 version = "3.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f1e260c3a9040a7c19a12468758f4c16f31a81a1fe087482be9570ec864bb6c"
+
+[[package]]
+name = "bytemuck"
+version = "1.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cdead85bdec19c194affaeeb670c0e41fe23de31459efd1c174d049269cf02cc"
 
 [[package]]
 name = "byteorder"
@@ -424,6 +431,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d3dd60d1080a57a05ab032377049e0591415d2b31afd7028356dbf3cc6dcb066"
 dependencies = [
  "generic-array",
+]
+
+[[package]]
+name = "encoding_rs"
+version = "0.8.31"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9852635589dc9f9ea1b6fe9f05b50ef208c85c834a562f0c6abb1c475736ec2b"
+dependencies = [
+ "cfg-if",
 ]
 
 [[package]]
@@ -1434,7 +1450,6 @@ name = "ras"
 version = "0.1.0"
 dependencies = [
  "aes",
- "alac",
  "anyhow",
  "base64",
  "bitflags",
@@ -1459,6 +1474,7 @@ dependencies = [
  "rtp-rs",
  "sdp",
  "sha-1",
+ "symphonia",
  "tokio",
  "tokio-stream",
 ]
@@ -1671,6 +1687,53 @@ name = "subtle"
 version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6bdef32e8150c2a081110b42772ffe7d7c9032b606bc226c8260fd97e0976601"
+
+[[package]]
+name = "symphonia"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eb30457ee7a904dae1e4ace25156dcabaf71e425db318e7885267f09cd8fb648"
+dependencies = [
+ "lazy_static",
+ "symphonia-codec-alac",
+ "symphonia-core",
+ "symphonia-metadata",
+]
+
+[[package]]
+name = "symphonia-codec-alac"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a95d0cc9d94c55d9467e71e26990e509bd5a602fabde3ee422d87f77bbda860a"
+dependencies = [
+ "log",
+ "symphonia-core",
+]
+
+[[package]]
+name = "symphonia-core"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1edcb254d25e02b688b6f8a290a778153fa5f29674ac50773d03e0a16060391d"
+dependencies = [
+ "arrayvec",
+ "bitflags",
+ "bytemuck",
+ "lazy_static",
+ "log",
+]
+
+[[package]]
+name = "symphonia-metadata"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f04ee665c99fd2b919b87261c86a5312e996b720ca142646a163d9583e72bd0e"
+dependencies = [
+ "encoding_rs",
+ "lazy_static",
+ "log",
+ "symphonia-core",
+]
 
 [[package]]
 name = "syn"
