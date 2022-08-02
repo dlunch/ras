@@ -1381,6 +1381,7 @@ dependencies = [
  "anyhow",
  "base64",
  "bitflags",
+ "bytes",
  "cbc",
  "cfg-if",
  "cidr-utils",
@@ -1405,6 +1406,7 @@ dependencies = [
  "symphonia",
  "tokio",
  "tokio-stream",
+ "tokio-util",
 ]
 
 [[package]]
@@ -1764,12 +1766,46 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokio-util"
+version = "0.7.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc463cd8deddc3770d20f9852143d50bf6094e640b485cb2e189a2099085ff45"
+dependencies = [
+ "bytes",
+ "futures-core",
+ "futures-sink",
+ "pin-project-lite",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "toml"
 version = "0.5.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d82e1a7758622a465f8cee077614c73484dac5b836c02ff6a40d5d1010324d7"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "tracing"
+version = "0.1.36"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2fce9567bd60a67d08a16488756721ba392f24f29006402881e43b19aac64307"
+dependencies = [
+ "cfg-if",
+ "pin-project-lite",
+ "tracing-core",
+]
+
+[[package]]
+name = "tracing-core"
+version = "0.1.29"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5aeea4303076558a00714b823f9ad67d58a3bbda1df83d8827d21193156e22f7"
+dependencies = [
+ "once_cell",
 ]
 
 [[package]]

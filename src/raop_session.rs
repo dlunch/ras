@@ -1,4 +1,9 @@
-use std::{io, net::IpAddr, str, sync::Arc};
+use std::{
+    io,
+    net::{IpAddr, SocketAddr},
+    str,
+    sync::Arc,
+};
 
 use aes::{
     cipher::{BlockDecryptMut, KeyIvInit},
@@ -6,6 +11,7 @@ use aes::{
 };
 use anyhow::{anyhow, Result};
 use cbc::Decryptor;
+use futures::{SinkExt, StreamExt};
 use log::{debug, info, trace, warn};
 use mac_address::MacAddress;
 use maplit::hashmap;
@@ -16,10 +22,11 @@ use tokio::{
     net::{TcpStream, UdpSocket},
     task,
 };
+use tokio_util::codec::Framed;
 
 use super::{
     decoder::{AppleLoselessDecoder, Decoder, RawPCMDecoder},
-    rtsp::{Request, Response, StatusCode},
+    rtsp::{Codec, Request, Response, StatusCode},
     sink::{AudioFormat, AudioSink},
 };
 
@@ -35,7 +42,7 @@ struct StreamInfo {
 
 pub struct RaopSession {
     id: u32,
-    stream: TcpStream,
+    local_addr: SocketAddr,
     mac_address: MacAddress,
     sink: Arc<dyn AudioSink>,
     stream_info: Option<StreamInfo>,
@@ -45,21 +52,22 @@ impl RaopSession {
     pub async fn start(id: u32, stream: TcpStream, sink: Arc<dyn AudioSink>, mac_address: MacAddress) {
         let mut session = Self {
             id,
-            stream,
+            local_addr: stream.local_addr().unwrap(),
             mac_address,
             sink,
             stream_info: None,
         };
 
-        let result = session.rtsp_loop().await;
+        let result = session.rtsp_loop(stream).await;
         if result.is_err() {
             info!("Connection closed");
         }
     }
 
-    async fn rtsp_loop(&mut self) -> Result<()> {
+    async fn rtsp_loop(&mut self, stream: TcpStream) -> Result<()> {
+        let mut rtsp = Framed::new(stream, Codec {});
         loop {
-            let req = Request::parse(&mut self.stream).await?;
+            let req = rtsp.next().await.unwrap()?;
             trace!(
                 "req {} {} {:?} {:?}",
                 req.method,
@@ -71,7 +79,7 @@ impl RaopSession {
             let res = self.handle_request(&req).await;
             trace!("res {} {:?}", res.status as u32, res.headers);
 
-            res.write(&mut self.stream).await?;
+            rtsp.send(res).await?;
         }
     }
 
@@ -105,7 +113,7 @@ impl RaopSession {
             if let Some(apple_challenge) = apple_challenge {
                 response.headers.insert(
                     "Apple-Response",
-                    Self::apple_response(self.stream.local_addr().unwrap().ip(), &self.mac_address.bytes(), apple_challenge).unwrap(),
+                    Self::apple_response(self.local_addr.ip(), &self.mac_address.bytes(), apple_challenge).unwrap(),
                 );
             }
             response.headers.insert("Server", "ras/0.1".into());
