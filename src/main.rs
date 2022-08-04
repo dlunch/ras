@@ -1,6 +1,7 @@
 mod decoder;
 mod mdns;
 mod raop_session;
+mod rtp;
 mod rtsp;
 mod sink;
 mod util;
