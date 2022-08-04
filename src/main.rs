@@ -1,4 +1,6 @@
+mod apple_challenge;
 mod decoder;
+mod key;
 mod mdns;
 mod raop_session;
 mod rtp;

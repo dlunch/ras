@@ -1,9 +1,4 @@
-use std::{
-    io,
-    net::{IpAddr, SocketAddr},
-    str,
-    sync::Arc,
-};
+use std::{io, str, sync::Arc};
 
 use aes::{
     cipher::{BlockDecryptMut, KeyIvInit},
@@ -15,21 +10,19 @@ use futures::{select, SinkExt, StreamExt};
 use log::{debug, info, trace, warn};
 use mac_address::MacAddress;
 use maplit::hashmap;
-use rsa::{pkcs1::DecodeRsaPrivateKey, PaddingScheme, RsaPrivateKey};
+use rsa::PaddingScheme;
 use sdp::SessionDescription;
 use tokio::net::{TcpStream, UdpSocket};
 use tokio_util::{codec::Framed, udp::UdpFramed};
 
 use super::{
+    apple_challenge::AppleChallenge,
     decoder::{AppleLoselessDecoder, Decoder, RawPCMDecoder},
+    key::RAOP_KEY,
     rtp::{Codec as RtpCodec, RtpPacket},
     rtsp::{Codec as RtspCodec, Request as RtspRequest, Response as RtspResponse, StatusCode},
     sink::{AudioFormat, AudioSink, AudioSinkSession},
 };
-
-lazy_static::lazy_static! {
-    static ref AIRPORT_EXPRESS_KEY: RsaPrivateKey = RsaPrivateKey::from_pkcs1_pem(include_str!("airport_express.key")).unwrap();
-}
 
 struct StreamInfo {
     rtp_type: u8,
@@ -43,8 +36,7 @@ pub struct RaopSession {
     rtp_port: u16,
     control_port: u16,
     timing_port: u16,
-    local_addr: SocketAddr,
-    mac_address: MacAddress,
+    apple_challenge: AppleChallenge,
     sink: Arc<dyn AudioSink>,
     stream_info: Option<StreamInfo>,
 }
@@ -60,8 +52,7 @@ impl RaopSession {
             rtp_port: rtp.local_addr().unwrap().port(),
             control_port: control.local_addr().unwrap().port(),
             timing_port: timing.local_addr().unwrap().port(),
-            local_addr: rtsp.local_addr().unwrap(),
-            mac_address,
+            apple_challenge: AppleChallenge::new(rtsp.local_addr().unwrap().ip(), &mac_address.bytes()),
             sink,
             stream_info: None,
         };
@@ -145,10 +136,9 @@ impl RaopSession {
                 response.headers.insert("CSeq", cseq.into());
             }
             if let Some(apple_challenge) = apple_challenge {
-                response.headers.insert(
-                    "Apple-Response",
-                    Self::apple_response(self.local_addr.ip(), &self.mac_address.bytes(), apple_challenge).unwrap(),
-                );
+                response
+                    .headers
+                    .insert("Apple-Response", self.apple_challenge.response(apple_challenge).unwrap());
             }
             response.headers.insert("Server", "ras/0.1".into());
 
@@ -252,7 +242,7 @@ impl RaopSession {
     }
 
     fn init_cipher(rsaaeskey: &[u8], aesiv: &[u8]) -> Result<Decryptor<Aes128>> {
-        let aeskey = AIRPORT_EXPRESS_KEY.decrypt(PaddingScheme::new_oaep::<sha1::Sha1>(), rsaaeskey)?;
+        let aeskey = RAOP_KEY.decrypt(PaddingScheme::new_oaep::<sha1::Sha1>(), rsaaeskey)?;
         let cipher = Decryptor::<Aes128>::new_from_slices(&aeskey, aesiv).unwrap();
 
         Ok(cipher)
@@ -269,39 +259,11 @@ impl RaopSession {
 
         Ok(decrypted)
     }
-
-    fn apple_response(local_addr: IpAddr, mac_address: &[u8], apple_challenge: &str) -> Result<String> {
-        let mut challenge = base64::decode(apple_challenge).unwrap();
-
-        match local_addr {
-            IpAddr::V4(ip) => challenge.extend_from_slice(&ip.octets()),
-            IpAddr::V6(ip) => challenge.extend_from_slice(&ip.octets()),
-        }
-        challenge.extend_from_slice(mac_address);
-
-        let response = AIRPORT_EXPRESS_KEY.sign(PaddingScheme::new_pkcs1v15_sign(None), &challenge)?;
-
-        Ok(base64::encode(response).replace('=', ""))
-    }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-
-    use std::net::{IpAddr, Ipv4Addr};
-
-    #[tokio::test]
-    async fn apple_challenge_test() -> Result<()> {
-        let addr = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1));
-        let mac_addr = [0x00, 0x11, 0x22, 0x33, 0x44, 0x55];
-
-        let apple_response = RaopSession::apple_response(addr, &mac_addr, "test")?;
-
-        assert_eq!(apple_response, "O5TD24VQqAKIdTjPfoZzAJIrJo0Vc3gXzVAy18cWSLGN9ckUjjSWs5YCPkSmN3ExPCq2FTHtCYMW03p27K5zav97hETnJ7yLznE7cVc1RztWk0msX4MmSoN84Ei9hKDAALq/e68d6OWU+0sSX0cYcRLegkNLiCt2fNT9DnLV3PPNfBOh6bZ+PKIlqeTdAdzm73t6Lz5CBNbM7E7M/faE03XJiQHIjRylKoXRDRLwImuz8l8rWxjBjWhmcKoBbjmk1X1ohSeZWkx0ie9ySQJYyTk2PlrPFTTdA2DFrGNEIHvxPbQ94Sr5oF5lUjNaXMj2dLidRu8sQWWrhUqCkGd3JQ");
-
-        Ok(())
-    }
 
     #[tokio::test]
     async fn cipher_test() -> Result<()> {
