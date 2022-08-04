@@ -7,7 +7,7 @@ edition = "2021"
 [dependencies]
 tokio = { version = "^1.19", features = ["full"] }
 tokio-stream = { version = "^0.1", features = ["io-util", "net"]}
-tokio-util = { version = "^0.7", features = ["codec"] }
+tokio-util = { version = "^0.7", features = ["codec", "net"] }
 bytes = { version = "^1.2" }
 futures = { version = "^0.3" }
 maplit = { version = "^1.0" }

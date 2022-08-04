@@ -9,25 +9,22 @@ use aes::{
     cipher::{BlockDecryptMut, KeyIvInit},
     Aes128, Block,
 };
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use cbc::Decryptor;
-use futures::{SinkExt, StreamExt};
+use futures::{select, SinkExt, StreamExt};
 use log::{debug, info, trace, warn};
 use mac_address::MacAddress;
 use maplit::hashmap;
 use rsa::{pkcs1::DecodeRsaPrivateKey, PaddingScheme, RsaPrivateKey};
-use rtp_rs::RtpReader;
 use sdp::SessionDescription;
-use tokio::{
-    net::{TcpStream, UdpSocket},
-    task,
-};
-use tokio_util::codec::Framed;
+use tokio::net::{TcpStream, UdpSocket};
+use tokio_util::{codec::Framed, udp::UdpFramed};
 
 use super::{
     decoder::{AppleLoselessDecoder, Decoder, RawPCMDecoder},
-    rtsp::{Codec, Request, Response, StatusCode},
-    sink::{AudioFormat, AudioSink},
+    rtp::{Codec as RtpCodec, RtpPacket},
+    rtsp::{Codec as RtspCodec, Request as RtspRequest, Response as RtspResponse, StatusCode},
+    sink::{AudioFormat, AudioSink, AudioSinkSession},
 };
 
 lazy_static::lazy_static! {
@@ -38,10 +35,14 @@ struct StreamInfo {
     rtp_type: u8,
     decoder: Box<dyn Decoder>,
     cipher: Option<Decryptor<Aes128>>,
+    session: Box<dyn AudioSinkSession>,
 }
 
 pub struct RaopSession {
     id: u32,
+    rtp_port: u16,
+    control_port: u16,
+    timing_port: u16,
     local_addr: SocketAddr,
     mac_address: MacAddress,
     sink: Arc<dyn AudioSink>,
@@ -49,60 +50,93 @@ pub struct RaopSession {
 }
 
 impl RaopSession {
-    pub async fn start(id: u32, stream: TcpStream, sink: Arc<dyn AudioSink>, mac_address: MacAddress) {
+    pub async fn start(id: u32, rtsp: TcpStream, sink: Arc<dyn AudioSink>, mac_address: MacAddress) {
+        let rtp = UdpSocket::bind("0.0.0.0:0").await.unwrap();
+        let control = UdpSocket::bind("0.0.0.0:0").await.unwrap();
+        let timing = UdpSocket::bind("0.0.0.0:0").await.unwrap();
+
         let mut session = Self {
             id,
-            local_addr: stream.local_addr().unwrap(),
+            rtp_port: rtp.local_addr().unwrap().port(),
+            control_port: control.local_addr().unwrap().port(),
+            timing_port: timing.local_addr().unwrap().port(),
+            local_addr: rtsp.local_addr().unwrap(),
             mac_address,
             sink,
             stream_info: None,
         };
 
-        let result = session.rtsp_loop(stream).await;
+        let result = session.rtsp_loop(rtsp, rtp).await;
         if result.is_err() {
             info!("Connection closed");
         }
     }
 
-    async fn rtsp_loop(&mut self, stream: TcpStream) -> Result<()> {
-        let mut rtsp = Framed::new(stream, Codec {});
+    async fn rtsp_loop(&mut self, rtsp: TcpStream, rtp: UdpSocket) -> Result<()> {
+        let (mut rtsp_write, rtsp_read) = Framed::new(rtsp, RtspCodec {}).split();
+        let mut rtp = UdpFramed::new(rtp, RtpCodec {}).fuse();
+
+        let mut rtsp_read = rtsp_read.fuse();
         loop {
-            let req = rtsp.next().await.unwrap()?;
-            trace!(
-                "req {} {} {:?} {:?}",
-                req.method,
-                req.path,
-                req.headers,
-                str::from_utf8(&req.content).unwrap_or("<Binary>")
-            );
+            select! {
+                rtsp_packet = rtsp_read.next() => {
+                    let req = rtsp_packet.unwrap()?;
+                    trace!(
+                        "req {} {} {:?} {:?}",
+                        req.method,
+                        req.path,
+                        req.headers,
+                        str::from_utf8(&req.content).unwrap_or("<Binary>")
+                    );
 
-            let res = self.handle_request(&req).await;
-            trace!("res {} {:?}", res.status as u32, res.headers);
+                    let res = self.handle_rtsp(&req).await;
+                    trace!("res {} {:?}", res.status as u32, res.headers);
 
-            rtsp.send(res).await?;
+                    rtsp_write.send(res).await?;
+                }
+                rtp_packet = rtp.next() => self.handle_rtp(rtp_packet.unwrap()?.0).await?,
+            }
         }
     }
 
-    async fn handle_request(&mut self, request: &Request) -> Response {
+    async fn handle_rtp(&mut self, packet: RtpPacket) -> Result<()> {
+        let stream_info = self.stream_info.as_mut().unwrap();
+
+        if packet.payload_type == stream_info.rtp_type {
+            let payload = if let Some(cipher) = &stream_info.cipher {
+                let decrypted = Self::decrypt(cipher, &packet.payload)?;
+
+                stream_info.decoder.decode(&decrypted)?
+            } else {
+                stream_info.decoder.decode(&packet.payload)?
+            };
+
+            stream_info.session.write(&payload)?;
+        }
+
+        Ok(())
+    }
+
+    async fn handle_rtsp(&mut self, request: &RtspRequest) -> RtspResponse {
         let cseq = request.headers.get("CSeq");
         let apple_challenge = request.headers.get("Apple-Challenge");
 
         let result = match request.method.as_str() {
             "ANNOUNCE" => self.handle_announce(request).await,
             "SETUP" => self.handle_setup(request).await,
-            "RECORD" => Ok(Response::new(StatusCode::Ok)),
-            "PAUSE" => Ok(Response::new(StatusCode::Ok)),
-            "FLUSH" => Ok(Response::new(StatusCode::Ok)),
-            "TEARDOWN" => Ok(Response::new(StatusCode::Ok)),
+            "RECORD" => Ok(RtspResponse::new(StatusCode::Ok)),
+            "PAUSE" => Ok(RtspResponse::new(StatusCode::Ok)),
+            "FLUSH" => Ok(RtspResponse::new(StatusCode::Ok)),
+            "TEARDOWN" => Ok(RtspResponse::new(StatusCode::Ok)),
             "OPTIONS" => self.handle_options(request).await,
-            "GET_PARAMETER" => Ok(Response::new(StatusCode::Ok)),
-            "SET_PARAMETER" => Ok(Response::new(StatusCode::Ok)),
-            "POST" => Ok(Response::new(StatusCode::NotFound)),
-            "GET" => Ok(Response::new(StatusCode::NotFound)),
+            "GET_PARAMETER" => Ok(RtspResponse::new(StatusCode::Ok)),
+            "SET_PARAMETER" => Ok(RtspResponse::new(StatusCode::Ok)),
+            "POST" => Ok(RtspResponse::new(StatusCode::NotFound)),
+            "GET" => Ok(RtspResponse::new(StatusCode::NotFound)),
             _ => {
                 warn!("Unhandled method {}", request.method);
 
-                Ok(Response::new(StatusCode::MethodNotAllowed))
+                Ok(RtspResponse::new(StatusCode::MethodNotAllowed))
             }
         };
 
@@ -120,12 +154,12 @@ impl RaopSession {
 
             response
         } else {
-            Response::new(StatusCode::InternalServerError)
+            RtspResponse::new(StatusCode::InternalServerError)
         }
     }
 
-    async fn handle_options(&mut self, _: &Request) -> Result<Response> {
-        Ok(Response::with_headers(
+    async fn handle_options(&mut self, _: &RtspRequest) -> Result<RtspResponse> {
+        Ok(RtspResponse::with_headers(
             StatusCode::Ok,
             hashmap! {
                 "Public" => "ANNOUNCE, SETUP, RECORD, PAUSE, FLUSH, TEARDOWN, OPTIONS, GET_PARAMETER, SET_PARAMETER, POST, GET".into()
@@ -133,7 +167,7 @@ impl RaopSession {
         ))
     }
 
-    async fn handle_announce(&mut self, request: &Request) -> Result<Response> {
+    async fn handle_announce(&mut self, request: &RtspRequest) -> Result<RtspResponse> {
         let response = (|| {
             let sdp = SessionDescription::unmarshal(&mut io::Cursor::new(&request.content)).ok()?;
 
@@ -179,35 +213,31 @@ impl RaopSession {
                 None
             };
 
+            let session = self.sink.start(decoder.channels(), decoder.rate(), decoder.format()).unwrap();
             self.stream_info = Some(StreamInfo {
                 rtp_type: codec.payload_type,
                 decoder,
                 cipher,
+                session,
             });
 
-            Some(Response::new(StatusCode::Ok))
+            Some(RtspResponse::new(StatusCode::Ok))
         })();
 
         if let Some(response) = response {
             Ok(response)
         } else {
-            Ok(Response::new(StatusCode::BadRequest))
+            Ok(RtspResponse::new(StatusCode::BadRequest))
         }
     }
 
-    async fn handle_setup(&mut self, request: &Request) -> Result<Response> {
+    async fn handle_setup(&mut self, request: &RtspRequest) -> Result<RtspResponse> {
         if let Some(client_transport) = request.headers.get("Transport") {
             debug!("client_transport: {:?}", client_transport);
 
-            let rtp = UdpSocket::bind("0.0.0.0:0").await?;
-            let control = UdpSocket::bind("0.0.0.0:0").await?;
-            let timing = UdpSocket::bind("0.0.0.0:0").await?;
-
             let transport = format!(
                 "RTP/AVP/UDP;unicast;mode=record;server_port={};control_port={};timing_port={}",
-                rtp.local_addr()?.port(),
-                control.local_addr()?.port(),
-                timing.local_addr()?.port()
+                self.rtp_port, self.control_port, self.timing_port
             );
 
             let response_headers = hashmap! {
@@ -215,13 +245,9 @@ impl RaopSession {
                 "Transport" => transport
             };
 
-            let stream_info = self.stream_info.take().ok_or_else(|| anyhow!("Invalid request"))?;
-            let sink = self.sink.clone();
-            task::spawn(async move { Self::rtp_loop(rtp, stream_info, sink).await.unwrap() });
-
-            Ok(Response::with_headers(StatusCode::Ok, response_headers))
+            Ok(RtspResponse::with_headers(StatusCode::Ok, response_headers))
         } else {
-            Ok(Response::new(StatusCode::BadRequest))
+            Ok(RtspResponse::new(StatusCode::BadRequest))
         }
     }
 
@@ -256,29 +282,6 @@ impl RaopSession {
         let response = AIRPORT_EXPRESS_KEY.sign(PaddingScheme::new_pkcs1v15_sign(None), &challenge)?;
 
         Ok(base64::encode(response).replace('=', ""))
-    }
-
-    async fn rtp_loop(socket: UdpSocket, mut stream_info: StreamInfo, sink: Arc<dyn AudioSink>) -> Result<()> {
-        let session = sink.start(stream_info.decoder.channels(), stream_info.decoder.rate(), stream_info.decoder.format())?;
-
-        loop {
-            let mut buf = [0; 2048];
-            let len = socket.recv(&mut buf).await?;
-
-            let rtp = RtpReader::new(&buf[..len]).map_err(|x| anyhow::Error::msg(format!("Can't read rtp packet {:?}", x)))?;
-
-            if rtp.payload_type() == stream_info.rtp_type {
-                let payload = if let Some(cipher) = &stream_info.cipher {
-                    let decrypted = Self::decrypt(cipher, rtp.payload())?;
-
-                    stream_info.decoder.decode(&decrypted)?
-                } else {
-                    stream_info.decoder.decode(rtp.payload())?
-                };
-
-                session.write(&payload)?;
-            }
-        }
     }
 }
 
