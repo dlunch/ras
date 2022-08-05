@@ -15,7 +15,7 @@ use std::{
 
 use anyhow::Result;
 use clap::Parser;
-use futures::{future::try_join_all, StreamExt};
+use futures::{future::try_join_all, FutureExt, StreamExt};
 use log::{debug, error};
 use mac_address::get_mac_address;
 use tokio::{
@@ -49,7 +49,11 @@ async fn main() -> Result<()> {
 
     let raop_join_handle = spawn(async move {
         let result = serve(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), args.port, |id, stream| {
-            raop_session::RaopSession::start(id, stream, audio_sink.clone(), mac_address)
+            raop_session::RaopSession::start(id, stream, audio_sink.clone(), mac_address).map(|x| {
+                if let Err(err) = x {
+                    error!("{:?}", err);
+                }
+            })
         })
         .await;
 

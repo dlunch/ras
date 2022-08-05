@@ -7,7 +7,7 @@ use aes::{
 use anyhow::Result;
 use cbc::Decryptor;
 use futures::{select, SinkExt, StreamExt};
-use log::{debug, info, trace, warn};
+use log::{debug, trace, warn};
 use mac_address::MacAddress;
 use maplit::hashmap;
 use rsa::PaddingScheme;
@@ -42,25 +42,22 @@ pub struct RaopSession {
 }
 
 impl RaopSession {
-    pub async fn start(id: u32, rtsp: TcpStream, sink: Arc<dyn AudioSink>, mac_address: MacAddress) {
-        let rtp = UdpSocket::bind("0.0.0.0:0").await.unwrap();
-        let control = UdpSocket::bind("0.0.0.0:0").await.unwrap();
-        let timing = UdpSocket::bind("0.0.0.0:0").await.unwrap();
+    pub async fn start(id: u32, rtsp: TcpStream, sink: Arc<dyn AudioSink>, mac_address: MacAddress) -> Result<()> {
+        let rtp = UdpSocket::bind("0.0.0.0:0").await?;
+        let control = UdpSocket::bind("0.0.0.0:0").await?;
+        let timing = UdpSocket::bind("0.0.0.0:0").await?;
 
         let mut session = Self {
             id,
-            rtp_port: rtp.local_addr().unwrap().port(),
-            control_port: control.local_addr().unwrap().port(),
-            timing_port: timing.local_addr().unwrap().port(),
-            apple_challenge: AppleChallenge::new(rtsp.local_addr().unwrap().ip(), &mac_address.bytes()),
+            rtp_port: rtp.local_addr()?.port(),
+            control_port: control.local_addr()?.port(),
+            timing_port: timing.local_addr()?.port(),
+            apple_challenge: AppleChallenge::new(rtsp.local_addr()?.ip(), &mac_address.bytes()),
             sink,
             stream_info: None,
         };
 
-        let result = session.rtsp_loop(rtsp, rtp).await;
-        if result.is_err() {
-            info!("Connection closed");
-        }
+        session.rtsp_loop(rtsp, rtp).await
     }
 
     async fn rtsp_loop(&mut self, rtsp: TcpStream, rtp: UdpSocket) -> Result<()> {
@@ -71,6 +68,10 @@ impl RaopSession {
         loop {
             select! {
                 rtsp_packet = rtsp_read.next() => {
+                    if rtsp_packet.is_none() {
+                        // connection closed
+                        return Ok(())
+                    }
                     let req = rtsp_packet.unwrap()?;
                     trace!(
                         "req {} {} {:?} {:?}",
