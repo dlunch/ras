@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-pub struct Request {
+pub struct RtspRequest {
     pub method: String,
     pub path: String,
     pub headers: HashMap<String, String>,

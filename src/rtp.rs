@@ -8,9 +8,9 @@ pub struct RtpPacket {
     pub payload: Vec<u8>,
 }
 
-pub struct Codec {}
+pub struct RtpCodec {}
 
-impl Decoder for Codec {
+impl Decoder for RtpCodec {
     type Item = RtpPacket;
     type Error = anyhow::Error;
 

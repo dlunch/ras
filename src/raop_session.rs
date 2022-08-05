@@ -19,8 +19,8 @@ use super::{
     apple_challenge::AppleChallenge,
     decoder::{AppleLoselessDecoder, Decoder, RawPCMDecoder},
     key::RAOP_KEY,
-    rtp::{Codec as RtpCodec, RtpPacket},
-    rtsp::{Codec as RtspCodec, Request as RtspRequest, Response as RtspResponse, StatusCode},
+    rtp::{RtpCodec, RtpPacket},
+    rtsp::{RtspCodec, RtspRequest, RtspResponse, RtspStatusCode},
     sink::{AudioFormat, AudioSink, AudioSinkSession},
 };
 
@@ -115,19 +115,19 @@ impl RaopSession {
         let result = match request.method.as_str() {
             "ANNOUNCE" => self.handle_announce(request).await,
             "SETUP" => self.handle_setup(request).await,
-            "RECORD" => Ok(RtspResponse::new(StatusCode::Ok)),
-            "PAUSE" => Ok(RtspResponse::new(StatusCode::Ok)),
-            "FLUSH" => Ok(RtspResponse::new(StatusCode::Ok)),
-            "TEARDOWN" => Ok(RtspResponse::new(StatusCode::Ok)),
+            "RECORD" => Ok(RtspResponse::new(RtspStatusCode::Ok)),
+            "PAUSE" => Ok(RtspResponse::new(RtspStatusCode::Ok)),
+            "FLUSH" => Ok(RtspResponse::new(RtspStatusCode::Ok)),
+            "TEARDOWN" => Ok(RtspResponse::new(RtspStatusCode::Ok)),
             "OPTIONS" => self.handle_options(request).await,
-            "GET_PARAMETER" => Ok(RtspResponse::new(StatusCode::Ok)),
-            "SET_PARAMETER" => Ok(RtspResponse::new(StatusCode::Ok)),
-            "POST" => Ok(RtspResponse::new(StatusCode::NotFound)),
-            "GET" => Ok(RtspResponse::new(StatusCode::NotFound)),
+            "GET_PARAMETER" => Ok(RtspResponse::new(RtspStatusCode::Ok)),
+            "SET_PARAMETER" => Ok(RtspResponse::new(RtspStatusCode::Ok)),
+            "POST" => Ok(RtspResponse::new(RtspStatusCode::NotFound)),
+            "GET" => Ok(RtspResponse::new(RtspStatusCode::NotFound)),
             _ => {
                 warn!("Unhandled method {}", request.method);
 
-                Ok(RtspResponse::new(StatusCode::MethodNotAllowed))
+                Ok(RtspResponse::new(RtspStatusCode::MethodNotAllowed))
             }
         };
 
@@ -144,13 +144,13 @@ impl RaopSession {
 
             response
         } else {
-            RtspResponse::new(StatusCode::InternalServerError)
+            RtspResponse::new(RtspStatusCode::InternalServerError)
         }
     }
 
     async fn handle_options(&mut self, _: &RtspRequest) -> Result<RtspResponse> {
         Ok(RtspResponse::with_headers(
-            StatusCode::Ok,
+            RtspStatusCode::Ok,
             hashmap! {
                 "Public" => "ANNOUNCE, SETUP, RECORD, PAUSE, FLUSH, TEARDOWN, OPTIONS, GET_PARAMETER, SET_PARAMETER, POST, GET".into()
             },
@@ -211,13 +211,13 @@ impl RaopSession {
                 session,
             });
 
-            Some(RtspResponse::new(StatusCode::Ok))
+            Some(RtspResponse::new(RtspStatusCode::Ok))
         })();
 
         if let Some(response) = response {
             Ok(response)
         } else {
-            Ok(RtspResponse::new(StatusCode::BadRequest))
+            Ok(RtspResponse::new(RtspStatusCode::BadRequest))
         }
     }
 
@@ -235,9 +235,9 @@ impl RaopSession {
                 "Transport" => transport
             };
 
-            Ok(RtspResponse::with_headers(StatusCode::Ok, response_headers))
+            Ok(RtspResponse::with_headers(RtspStatusCode::Ok, response_headers))
         } else {
-            Ok(RtspResponse::new(StatusCode::BadRequest))
+            Ok(RtspResponse::new(RtspStatusCode::BadRequest))
         }
     }
 
