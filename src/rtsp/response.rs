@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 #[derive(Clone, Copy)]
-pub enum StatusCode {
+pub enum RtspStatusCode {
     Ok = 200,
     BadRequest = 400,
     NotFound = 404,
@@ -9,32 +9,32 @@ pub enum StatusCode {
     InternalServerError = 500,
 }
 
-impl StatusCode {
+impl RtspStatusCode {
     pub fn as_string(&self) -> &'static str {
         match self {
-            StatusCode::Ok => "OK",
-            StatusCode::BadRequest => "Bad Request",
-            StatusCode::NotFound => "Not Found",
-            StatusCode::MethodNotAllowed => "Method Not Allowed",
-            StatusCode::InternalServerError => "Internal Server Error",
+            RtspStatusCode::Ok => "OK",
+            RtspStatusCode::BadRequest => "Bad Request",
+            RtspStatusCode::NotFound => "Not Found",
+            RtspStatusCode::MethodNotAllowed => "Method Not Allowed",
+            RtspStatusCode::InternalServerError => "Internal Server Error",
         }
     }
 }
 
-pub struct Response {
-    pub status: StatusCode,
+pub struct RtspResponse {
+    pub status: RtspStatusCode,
     pub headers: HashMap<&'static str, String>,
 }
 
-impl Response {
-    pub fn new(status: StatusCode) -> Self {
+impl RtspResponse {
+    pub fn new(status: RtspStatusCode) -> Self {
         Self {
             status,
             headers: HashMap::new(),
         }
     }
 
-    pub fn with_headers(status: StatusCode, headers: HashMap<&'static str, String>) -> Self {
+    pub fn with_headers(status: RtspStatusCode, headers: HashMap<&'static str, String>) -> Self {
         Self { status, headers }
     }
 }

@@ -8,13 +8,13 @@ use anyhow::Result;
 use bytes::{Buf, BytesMut};
 use tokio_util::codec::{Decoder, Encoder};
 
-pub use request::Request;
-pub use response::{Response, StatusCode};
+pub use request::RtspRequest;
+pub use response::{RtspResponse, RtspStatusCode};
 
-pub struct Codec {}
+pub struct RtspCodec {}
 
-impl Decoder for Codec {
-    type Item = Request;
+impl Decoder for RtspCodec {
+    type Item = RtspRequest;
     type Error = anyhow::Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
@@ -56,7 +56,7 @@ impl Decoder for Codec {
 
         src.advance(header_end + content.len());
 
-        Ok(Some(Request {
+        Ok(Some(RtspRequest {
             method,
             path,
             headers,
@@ -65,10 +65,10 @@ impl Decoder for Codec {
     }
 }
 
-impl Encoder<Response> for Codec {
+impl Encoder<RtspResponse> for RtspCodec {
     type Error = anyhow::Error;
 
-    fn encode(&mut self, item: Response, dst: &mut BytesMut) -> Result<(), Self::Error> {
+    fn encode(&mut self, item: RtspResponse, dst: &mut BytesMut) -> Result<(), Self::Error> {
         dst.extend(format!("RTSP/1.0 {} {}\r\n", item.status as usize, item.status.as_string()).as_bytes());
 
         for (key, value) in &item.headers {
@@ -93,7 +93,7 @@ mod test {
     async fn test_simple_request() -> Result<()> {
         let data = "GET /info RTSP/1.0\r\nX-Apple-ProtocolVersion: 1\r\nCSeq: 0\r\n\r\n";
 
-        let mut codec = Codec {};
+        let mut codec = RtspCodec {};
         let mut bytes = BytesMut::from(data);
 
         let req = codec.decode(&mut bytes)?.unwrap();
@@ -107,9 +107,9 @@ mod test {
 
     #[tokio::test]
     async fn test_simple_response() -> Result<()> {
-        let response = Response::with_headers(StatusCode::Ok, hashmap! { "Test" => "Test".into() });
+        let response = RtspResponse::with_headers(RtspStatusCode::Ok, hashmap! { "Test" => "Test".into() });
 
-        let mut codec = Codec {};
+        let mut codec = RtspCodec {};
         let mut bytes = BytesMut::new();
 
         codec.encode(response, &mut bytes)?;
