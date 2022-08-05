@@ -4,7 +4,7 @@ use aes::{
     cipher::{BlockDecryptMut, KeyIvInit},
     Aes128, Block,
 };
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use cbc::Decryptor;
 use futures::{select, SinkExt, StreamExt};
 use log::{debug, trace, warn};
@@ -92,19 +92,20 @@ impl RaopSession {
     }
 
     async fn handle_rtp(&mut self, packet: RtpPacket) -> Result<()> {
-        let stream_info = self.stream_info.as_mut().unwrap();
-
-        if packet.payload_type == stream_info.rtp_type {
-            let payload = if let Some(cipher) = &stream_info.cipher {
-                let decrypted = Self::decrypt(cipher, &packet.payload)?;
-
-                stream_info.decoder.decode(&decrypted)?
-            } else {
-                stream_info.decoder.decode(&packet.payload)?
-            };
-
-            stream_info.session.write(&payload)?;
+        let stream_info = self.stream_info.as_mut().ok_or_else(|| anyhow!("unexpected rtp packet"))?;
+        if packet.payload_type != stream_info.rtp_type {
+            return Err(anyhow!("Invalid rtp payload type"));
         }
+
+        let payload = if let Some(cipher) = &stream_info.cipher {
+            let decrypted = Self::decrypt(cipher, &packet.payload)?;
+
+            stream_info.decoder.decode(&decrypted)?
+        } else {
+            stream_info.decoder.decode(&packet.payload)?
+        };
+
+        stream_info.session.write(&payload)?;
 
         Ok(())
     }
