@@ -840,6 +840,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a3e378b66a060d48947b590737b30a1be76706c8dd7b8ba0f2fe3989c68a853f"
 
 [[package]]
+name = "mdns"
+version = "0.1.0"
+source = "git+https://github.com/dlunch/mdns#d792e3d31526aff399c90520e6a60ec64b91dbae"
+dependencies = [
+ "anyhow",
+ "bitflags",
+ "cidr-utils",
+ "get_if_addrs",
+ "hostname",
+ "ipconfig",
+ "log",
+ "multicast-socket",
+ "tokio",
+]
+
+[[package]]
 name = "memchr"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1333,21 +1349,16 @@ dependencies = [
  "aes",
  "anyhow",
  "base64",
- "bitflags",
  "bytes",
  "cbc",
  "cfg-if",
- "cidr-utils",
  "clap",
  "futures",
- "get_if_addrs",
- "hostname",
- "ipconfig",
  "lazy_static",
  "log",
  "mac_address",
  "maplit",
- "multicast-socket",
+ "mdns",
  "pretty_env_logger",
  "rodio",
  "rsa",
