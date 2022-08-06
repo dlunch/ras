@@ -1,4 +1,6 @@
 mod dummy;
+#[cfg(all(unix, not(target_os = "macos")))]
+mod pulseaudio;
 mod rodio;
 
 use std::sync::Arc;
@@ -17,12 +19,6 @@ pub trait AudioSink: Send + Sync {
 
 pub trait AudioSinkSession: Send + Sync {
     fn write(&self, payload: &[u8]) -> Result<()>;
-}
-
-cfg_if::cfg_if! {
-    if #[cfg(all(unix, not(target_os = "macos")))] {
-        mod pulseaudio;
-    }
 }
 
 pub fn create(sink: &str) -> Arc<dyn AudioSink> {
