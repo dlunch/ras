@@ -37,7 +37,3 @@ ipconfig = { version = "^0.3" }
 
 [target.'cfg(unix)'.dependencies]
 get_if_addrs = { version = "^0.5" }
-
-[target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
-libpulse-binding = { version = "^2.0" }
-libpulse-simple-binding = { version = "^2.0" }
