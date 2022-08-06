@@ -39,7 +39,7 @@ jobs:
 
       - name: Install required packages
         if: matrix.os == 'ubuntu-latest'
-        run: sudo apt update && sudo apt instal libasound2-dev
+        run: sudo apt update && sudo apt install libasound2-dev
 
       - uses: actions-rs/toolchain@v1
         with:
