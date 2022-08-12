@@ -17,7 +17,7 @@ rtp-rs = { version = "^0.6" }
 symphonia = { version = "^0.5", default-features = false, features = ["alac"] }
 cfg-if = { version = "^1.0" }
 mac_address = { version = "^1.1" }
-clap = { version = "^3.0", features = ["derive"] }
+clap = { version = "^3.2", features = ["derive"] }
 rodio = { version = "^0.15", default-features = false }
 anyhow = { version = "^1.0" }
 sdp = { version = "^0.5.1" }
