@@ -3,7 +3,7 @@ use std::net::IpAddr;
 use anyhow::Result;
 use rsa::PaddingScheme;
 
-use super::key::RAOP_KEY;
+use super::key::RTSP_KEY;
 
 pub struct AppleChallenge {
     ip_mac: Vec<u8>,
@@ -26,7 +26,7 @@ impl AppleChallenge {
         let mut challenge = base64::decode(challenge).unwrap();
         challenge.extend_from_slice(&self.ip_mac);
 
-        let response = RAOP_KEY.sign(PaddingScheme::new_pkcs1v15_sign(None), &challenge)?;
+        let response = RTSP_KEY.sign(PaddingScheme::new_pkcs1v15_sign(None), &challenge)?;
 
         Ok(base64::encode(response).replace('=', ""))
     }
