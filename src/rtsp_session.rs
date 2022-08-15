@@ -31,7 +31,7 @@ struct StreamInfo {
     session: Box<dyn AudioSinkSession>,
 }
 
-pub struct RaopSession {
+pub struct RtspSession {
     id: u32,
     rtp_port: u16,
     control_port: u16,
@@ -41,7 +41,7 @@ pub struct RaopSession {
     stream_info: Option<StreamInfo>,
 }
 
-impl RaopSession {
+impl RtspSession {
     pub async fn start(id: u32, rtsp: TcpStream, sink: Arc<dyn AudioSink>, mac_address: MacAddress) -> Result<()> {
         let rtp = UdpSocket::bind("0.0.0.0:0").await?;
         let control = UdpSocket::bind("0.0.0.0:0").await?;
@@ -282,13 +282,13 @@ mod test {
         ];
         let iv = vec![185, 103, 26, 130, 51, 239, 107, 111, 155, 57, 8, 107, 138, 170, 168, 207];
 
-        let cipher = RaopSession::init_rtp_payload_cipher(&key, &iv)?;
+        let cipher = RtspSession::init_rtp_payload_cipher(&key, &iv)?;
 
         let raw = vec![
             155, 34, 3, 99, 252, 176, 190, 92, 160, 127, 189, 240, 217, 146, 246, 27, 183, 181, 224, 15, 151, 211, 28, 90, 6, 242, 154, 94, 155, 184,
             129, 146,
         ];
-        let decrypted = RaopSession::decrypt_rtp_payload(&cipher, &raw)?;
+        let decrypted = RtspSession::decrypt_rtp_payload(&cipher, &raw)?;
         assert_eq!(
             decrypted,
             vec![32, 0, 0, 4, 0, 19, 8, 9, 129, 248, 193, 255, 128, 0, 0, 19, 8, 9, 129, 248, 193, 255, 128, 0, 0, 255, 128, 175, 191, 224, 43, 252]
@@ -305,7 +305,7 @@ mod test {
             39, 184, 100, 18, 129, 170, 194, 176, 87, 27, 225, 214, 1, 199, 67, 202, 3, 245, 29, 153, 191, 195, 116, 21, 77, 176, 250, 168, 248, 149,
             42, 180, 37, 223, 58, 34, 91, 80, 30, 248,
         ];
-        let decrypted = RaopSession::decrypt_rtp_payload(&cipher, &raw)?;
+        let decrypted = RtspSession::decrypt_rtp_payload(&cipher, &raw)?;
 
         assert_eq!(
             decrypted,

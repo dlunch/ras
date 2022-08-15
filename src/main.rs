@@ -1,9 +1,9 @@
 mod apple_challenge;
 mod decoder;
 mod key;
-mod raop_session;
 mod rtp;
 mod rtsp;
+mod rtsp_session;
 mod sink;
 mod util;
 
@@ -48,7 +48,7 @@ async fn main() -> Result<()> {
 
     let raop_join_handle = spawn(async move {
         let result = serve(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), args.port, |id, stream| {
-            raop_session::RaopSession::start(id, stream, audio_sink.clone(), mac_address).map(|x| {
+            rtsp_session::RtspSession::start(id, stream, audio_sink.clone(), mac_address).map(|x| {
                 if let Err(err) = x {
                     error!("{:?}", err);
                 }
