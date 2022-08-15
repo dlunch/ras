@@ -18,7 +18,7 @@ use tokio_util::{codec::Framed, udp::UdpFramed};
 use super::{
     apple_challenge::AppleChallenge,
     decoder::{AppleLoselessDecoder, Decoder, RawPCMDecoder},
-    key::RAOP_KEY,
+    key::RTSP_KEY,
     rtp::{RtpCodec, RtpPacket},
     rtsp::{RtspCodec, RtspRequest, RtspResponse, RtspStatusCode},
     sink::{AudioFormat, AudioSink, AudioSinkSession},
@@ -244,7 +244,7 @@ impl RtspSession {
     }
 
     fn init_rtp_payload_cipher(rsaaeskey: &[u8], aesiv: &[u8]) -> Result<Decryptor<Aes128>> {
-        let aeskey = RAOP_KEY.decrypt(PaddingScheme::new_oaep::<sha1::Sha1>(), rsaaeskey)?;
+        let aeskey = RTSP_KEY.decrypt(PaddingScheme::new_oaep::<sha1::Sha1>(), rsaaeskey)?;
         let cipher = Decryptor::<Aes128>::new_from_slices(&aeskey, aesiv).unwrap();
 
         Ok(cipher)
