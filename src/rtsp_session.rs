@@ -50,12 +50,14 @@ impl RtspSession {
             stream_info: None,
         };
 
-        session.rtsp_loop(rtsp, rtp).await
+        session.rtsp_loop(rtsp, rtp, control, timing).await
     }
 
-    async fn rtsp_loop(&mut self, rtsp: TcpStream, rtp: UdpSocket) -> Result<()> {
+    async fn rtsp_loop(&mut self, rtsp: TcpStream, rtp: UdpSocket, control: UdpSocket, timing: UdpSocket) -> Result<()> {
         let (mut rtsp_write, rtsp_read) = Framed::new(rtsp, RtspCodec {}).split();
         let mut rtp = UdpFramed::new(rtp, RtpCodec {}).fuse();
+        let mut control = UdpFramed::new(control, RtpCodec {}).fuse();
+        let mut timing = UdpFramed::new(timing, RtpCodec {}).fuse();
 
         let mut rtsp_read = rtsp_read.fuse();
         loop {
@@ -80,8 +82,22 @@ impl RtspSession {
                     rtsp_write.send(res).await?;
                 }
                 rtp_packet = rtp.next() => self.handle_rtp(rtp_packet.unwrap()?.0).await?,
+                control_packet = control.next() => self.handle_control(control_packet.unwrap()?.0).await?,
+                timing_packet = timing.next() => self.handle_timing(timing_packet.unwrap()?.0).await?,
             }
         }
+    }
+
+    async fn handle_control(&mut self, packet: RtpPacket) -> Result<()> {
+        trace!("control packet received {} {:?}", packet.payload_type, packet.payload);
+
+        Ok(())
+    }
+
+    async fn handle_timing(&mut self, packet: RtpPacket) -> Result<()> {
+        trace!("timing packet received {} {:?}", packet.payload_type, packet.payload);
+
+        Ok(())
     }
 
     async fn handle_rtp(&mut self, packet: RtpPacket) -> Result<()> {
