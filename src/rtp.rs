@@ -71,7 +71,7 @@ impl Decoder for RtpControlCodec {
             return Ok(None);
         }
         let data = unsafe { &*(src.as_ptr() as *const RawRtpControlPacket) };
-        src.advance(core::mem::size_of::<RtpControlCodec>());
+        src.advance(core::mem::size_of::<RawRtpControlPacket>());
 
         Ok(Some(RtpControlPacket {
             timestamp: u32::from_be_bytes(data.rtp_timestamp),
