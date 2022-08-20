@@ -67,7 +67,7 @@ impl Decoder for RtpControlCodec {
             next_timestamp: [u8; 4],
         }
 
-        if src.len() < core::mem::size_of::<RtpControlCodec>() {
+        if src.len() < core::mem::size_of::<RawRtpControlPacket>() {
             return Ok(None);
         }
         let data = unsafe { &*(src.as_ptr() as *const RawRtpControlPacket) };
