@@ -12,7 +12,7 @@ use tokio_util::{codec::Framed, udp::UdpFramed};
 use super::{
     cipher::{AppleChallenge, RsaAesCipher},
     decoder::{AppleLoselessDecoder, Decoder, RawPCMDecoder},
-    rtp::{RtpCodec, RtpPacket},
+    rtp::{RtpCodec, RtpControlCodec, RtpControlPacket, RtpPacket},
     rtsp::{RtspCodec, RtspRequest, RtspResponse, RtspStatusCode},
     sink::{AudioFormat, AudioSink, AudioSinkSession},
 };
@@ -56,7 +56,7 @@ impl RtspSession {
     async fn rtsp_loop(&mut self, rtsp: TcpStream, rtp: UdpSocket, control: UdpSocket, timing: UdpSocket) -> Result<()> {
         let (mut rtsp_write, rtsp_read) = Framed::new(rtsp, RtspCodec {}).split();
         let mut rtp = UdpFramed::new(rtp, RtpCodec {}).fuse();
-        let mut control = UdpFramed::new(control, RtpCodec {}).fuse();
+        let mut control = UdpFramed::new(control, RtpControlCodec {}).fuse();
         let mut timing = UdpFramed::new(timing, RtpCodec {}).fuse();
 
         let mut rtsp_read = rtsp_read.fuse();
@@ -88,8 +88,14 @@ impl RtspSession {
         }
     }
 
-    async fn handle_control(&mut self, packet: RtpPacket) -> Result<()> {
-        trace!("control packet received {} {:?}", packet.payload_type, packet.payload);
+    async fn handle_control(&mut self, packet: RtpControlPacket) -> Result<()> {
+        trace!(
+            "control packet received {} {} {} {}",
+            packet.timestamp,
+            packet.current_time_seconds,
+            packet.current_time_fraction,
+            packet.next_timestamp
+        );
 
         Ok(())
     }
