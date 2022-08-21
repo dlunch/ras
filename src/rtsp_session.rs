@@ -1,4 +1,4 @@
-use std::{io, str, sync::Arc};
+use std::{collections::HashMap, io, str, sync::Arc};
 
 use anyhow::{anyhow, Result};
 use futures::{select, SinkExt, StreamExt};
@@ -241,6 +241,18 @@ impl RtspSession {
     async fn handle_setup(&mut self, request: &RtspRequest) -> Result<RtspResponse> {
         if let Some(client_transport) = request.headers.get("Transport") {
             debug!("client_transport: {:?}", client_transport);
+
+            let transports = client_transport
+                .split(';')
+                .map(|x| x.split('=').collect::<Vec<_>>())
+                .map(|x| (x[0], x[1]))
+                .collect::<HashMap<_, _>>();
+
+            let client_control_port = transports.get("control_port").unwrap();
+            let client_timing_port = transports.get("timing_port").unwrap();
+
+            debug!("client_control_port: {}", client_control_port);
+            debug!("client_timing_port: {}", client_timing_port);
 
             let transport = format!(
                 "RTP/AVP/UDP;unicast;mode=record;server_port={};control_port={};timing_port={}",
