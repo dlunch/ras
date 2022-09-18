@@ -245,7 +245,7 @@ impl RtspSession {
             let transports = client_transport
                 .split(';')
                 .map(|x| x.split('=').collect::<Vec<_>>())
-                .map(|x| (x[0], x[1]))
+                .map(|x| if x.len() == 2 { (x[0], x[1]) } else { (x[0], "") })
                 .collect::<HashMap<_, _>>();
 
             let client_control_port = transports.get("control_port").unwrap();
