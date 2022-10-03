@@ -45,7 +45,7 @@ async fn main() -> Result<()> {
 
     let audio_sink = sink::create(&args.audio_sink);
 
-    let raop_join_handle = spawn(async move {
+    let rtsp_join_handle = spawn(async move {
         let result = serve(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), args.port, |id, stream| {
             rtsp_session::RtspSession::start(id, stream, audio_sink.clone(), mac_address).map(|x| {
                 if let Err(err) = x {
@@ -84,7 +84,7 @@ async fn main() -> Result<()> {
         server.serve().await
     });
 
-    try_join_all([raop_join_handle, mdns_join_handle]).await?;
+    try_join_all([rtsp_join_handle, mdns_join_handle]).await?;
 
     Ok(())
 }
