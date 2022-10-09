@@ -11,12 +11,12 @@ pub enum AudioFormat {
     S16NE,
 }
 
-pub trait AudioSink: Send + Sync {
-    fn start(&self, channels: u8, rate: u32, format: AudioFormat) -> Result<Box<dyn AudioSinkSession>>;
+pub trait AudioSink {
+    fn start(&self) -> Result<Arc<dyn AudioSinkSession>>;
 }
 
 pub trait AudioSinkSession: Send + Sync {
-    fn write(&self, payload: &[u8]) -> Result<()>;
+    fn write(&self, payload: &[u8], channels: u8, rate: u32, format: AudioFormat) -> Result<()>;
 }
 
 pub fn create(sink: &str) -> Arc<dyn AudioSink> {

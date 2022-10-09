@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use anyhow::Result;
 use log::trace;
 
@@ -12,15 +14,15 @@ impl DummyAudioSink {
 }
 
 impl AudioSink for DummyAudioSink {
-    fn start(&self, _: u8, _: u32, _: AudioFormat) -> Result<Box<dyn AudioSinkSession>> {
-        Ok(Box::new(DummyAudioSinkSession {}))
+    fn start(&self) -> Result<Arc<dyn AudioSinkSession>> {
+        Ok(Arc::new(DummyAudioSinkSession {}))
     }
 }
 
 pub struct DummyAudioSinkSession {}
 
 impl AudioSinkSession for DummyAudioSinkSession {
-    fn write(&self, payload: &[u8]) -> Result<()> {
+    fn write(&self, payload: &[u8], _: u8, _: u32, _: AudioFormat) -> Result<()> {
         trace!("DummyAudioSink::write {:?}", payload);
 
         Ok(())

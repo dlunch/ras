@@ -6,20 +6,14 @@ mod rtsp_session;
 mod sink;
 mod util;
 
-use std::{
-    future::Future,
-    net::{IpAddr, Ipv4Addr, SocketAddr},
-};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 use anyhow::Result;
 use clap::Parser;
-use futures::{future::try_join_all, FutureExt, StreamExt};
+use futures::StreamExt;
 use log::{debug, error};
 use mac_address::get_mac_address;
-use tokio::{
-    net::{TcpListener, TcpStream},
-    task::spawn,
-};
+use tokio::{net::TcpListener, task::spawn};
 use tokio_stream::wrappers::TcpListenerStream;
 
 #[derive(Parser, Debug)]
@@ -43,25 +37,6 @@ async fn main() -> Result<()> {
     let mac_address = get_mac_address()?.unwrap();
     debug!("Mac address: {}", mac_address);
 
-    let audio_sink = sink::create(&args.audio_sink);
-
-    let rtsp_join_handle = spawn(async move {
-        let result = serve(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), args.port, |id, stream| {
-            rtsp_session::RtspSession::start(id, stream, audio_sink.clone(), mac_address).map(|x| {
-                if let Err(err) = x {
-                    error!("{:?}", err);
-                }
-            })
-        })
-        .await;
-
-        if let Err(e) = &result {
-            error!("{}", e);
-        }
-
-        result
-    });
-
     let mdns_join_handle = spawn(async move {
         let service = simple_mdns::Service::new(
             "_raop._tcp",
@@ -84,25 +59,29 @@ async fn main() -> Result<()> {
         server.serve().await
     });
 
-    try_join_all([rtsp_join_handle, mdns_join_handle]).await?;
+    let audio_sink = sink::create(&args.audio_sink);
+    let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), args.port);
 
-    Ok(())
-}
-
-pub async fn serve<F>(ip: IpAddr, port: u16, handler: impl Fn(u32, TcpStream) -> F) -> Result<()>
-where
-    F: Future<Output = ()> + Send + 'static,
-{
-    let listener = TcpListener::bind(SocketAddr::new(ip, port)).await?;
+    let listener = TcpListener::bind(addr).await?;
     let mut incoming = TcpListenerStream::new(listener);
 
     let mut id = 1;
     while let Some(stream) = incoming.next().await {
         let stream = stream?;
 
-        spawn(handler(id, stream));
+        let audio_session = audio_sink.start()?;
+        spawn(async move {
+            let result = rtsp_session::RtspSession::start(id, stream, audio_session, mac_address).await;
+
+            if let Err(err) = result {
+                error!("{:?}", err);
+            }
+        });
+
         id += 1;
     }
+
+    mdns_join_handle.await??;
 
     Ok(())
 }
