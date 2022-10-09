@@ -14,14 +14,14 @@ use super::{
     decoder::{AppleLoselessDecoder, Decoder, RawPCMDecoder},
     rtp::{RtpCodec, RtpControlCodec, RtpControlPacket, RtpPacket},
     rtsp::{RtspCodec, RtspRequest, RtspResponse, RtspStatusCode},
-    sink::{AudioFormat, AudioSink, AudioSinkSession},
+    sink::{AudioFormat, AudioSinkSession},
 };
 
 struct StreamInfo {
     rtp_type: u8,
     decoder: Box<dyn Decoder>,
     cipher: Option<RsaAesCipher>,
-    session: Box<dyn AudioSinkSession>,
+    session: Arc<dyn AudioSinkSession>,
 }
 
 pub struct RtspSession {
@@ -30,12 +30,12 @@ pub struct RtspSession {
     control_port: u16,
     timing_port: u16,
     apple_challenge: AppleChallenge,
-    sink: Arc<dyn AudioSink>,
+    session: Arc<dyn AudioSinkSession>,
     stream_info: Option<StreamInfo>,
 }
 
 impl RtspSession {
-    pub async fn start(id: u32, rtsp: TcpStream, sink: Arc<dyn AudioSink>, mac_address: MacAddress) -> Result<()> {
+    pub async fn start(id: u32, rtsp: TcpStream, session: Arc<dyn AudioSinkSession>, mac_address: MacAddress) -> Result<()> {
         let rtp = UdpSocket::bind("0.0.0.0:0").await?;
         let control = UdpSocket::bind("0.0.0.0:0").await?;
         let timing = UdpSocket::bind("0.0.0.0:0").await?;
@@ -46,7 +46,7 @@ impl RtspSession {
             control_port: control.local_addr()?.port(),
             timing_port: timing.local_addr()?.port(),
             apple_challenge: AppleChallenge::new(rtsp.local_addr()?.ip(), &mac_address.bytes()),
-            sink,
+            session,
             stream_info: None,
         };
 
@@ -120,7 +120,12 @@ impl RtspSession {
             stream_info.decoder.decode(&packet.payload)?
         };
 
-        stream_info.session.write(&payload)?;
+        stream_info.session.write(
+            &payload,
+            stream_info.decoder.channels(),
+            stream_info.decoder.rate(),
+            stream_info.decoder.format(),
+        )?;
 
         Ok(())
     }
@@ -220,12 +225,11 @@ impl RtspSession {
                 None
             };
 
-            let session = self.sink.start(decoder.channels(), decoder.rate(), decoder.format()).unwrap();
             self.stream_info = Some(StreamInfo {
                 rtp_type: codec.payload_type,
                 decoder,
                 cipher,
-                session,
+                session: self.session.clone(),
             });
 
             Some(RtspResponse::new(RtspStatusCode::Ok))
