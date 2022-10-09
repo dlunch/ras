@@ -13,17 +13,11 @@ use symphonia::{
 
 use crate::sink::AudioFormat;
 
-pub trait Decoder: Send {
+pub trait Decoder: Send + Sync {
     fn channels(&self) -> u8;
     fn rate(&self) -> u32;
     fn format(&self) -> AudioFormat;
-    fn decode(&mut self, raw: &[u8]) -> Result<Vec<u8>>;
-}
-
-pub struct AppleLoselessDecoder {
-    decoder: AlacDecoder,
-    channels: u8,
-    sample_rate: u32,
+    fn decode(&self, raw: &[u8]) -> Result<Vec<u8>>;
 }
 
 #[repr(C)]
@@ -42,24 +36,20 @@ struct MagicCookie {
     sample_rate: [u8; 4],
 }
 
+pub struct AppleLoselessDecoder {
+    channels: u8,
+    sample_rate: u32,
+    magic_cookie: MagicCookie,
+}
+
 impl AppleLoselessDecoder {
     pub fn new(fmtp: &str) -> Result<Self> {
         let magic_cookie = Self::fmtp_to_magic_cookie(fmtp)?;
-        let magic_cookie_data: [u8; 24] =
-            (unsafe { slice::from_raw_parts(&magic_cookie as *const MagicCookie as *const u8, size_of::<MagicCookie>()) }).try_into()?;
-
-        let decoder = AlacDecoder::try_new(
-            CodecParameters::new()
-                .for_codec(CODEC_TYPE_ALAC)
-                .with_sample_format(SampleFormat::S16)
-                .with_extra_data(Box::new(magic_cookie_data)),
-            &DecoderOptions::default(),
-        )?;
 
         Ok(Self {
-            decoder,
             channels: magic_cookie.num_channels,
             sample_rate: u32::from_be_bytes(magic_cookie.sample_rate),
+            magic_cookie,
         })
     }
 
@@ -95,9 +85,20 @@ impl Decoder for AppleLoselessDecoder {
         AudioFormat::S16NE
     }
 
-    fn decode(&mut self, raw: &[u8]) -> Result<Vec<u8>> {
+    fn decode(&self, raw: &[u8]) -> Result<Vec<u8>> {
+        let magic_cookie_data: [u8; 24] =
+            (unsafe { slice::from_raw_parts(&self.magic_cookie as *const MagicCookie as *const u8, size_of::<MagicCookie>()) }).try_into()?;
+
+        let mut decoder = AlacDecoder::try_new(
+            CodecParameters::new()
+                .for_codec(CODEC_TYPE_ALAC)
+                .with_sample_format(SampleFormat::S16)
+                .with_extra_data(Box::new(magic_cookie_data)),
+            &DecoderOptions::default(),
+        )?;
+
         let packet = Packet::new_from_slice(0, 0, 0, raw);
-        let decoded = self.decoder.decode(&packet)?;
+        let decoded = decoder.decode(&packet)?;
 
         let spec = *decoded.spec();
         let duration = decoded.capacity() as u64;
@@ -133,7 +134,7 @@ impl Decoder for RawPCMDecoder {
         self.format
     }
 
-    fn decode(&mut self, raw: &[u8]) -> Result<Vec<u8>> {
+    fn decode(&self, raw: &[u8]) -> Result<Vec<u8>> {
         Ok(raw.to_vec())
     }
 }

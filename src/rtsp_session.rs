@@ -88,7 +88,7 @@ impl RtspSession {
         }
     }
 
-    async fn handle_control(&mut self, packet: RtpControlPacket) -> Result<()> {
+    async fn handle_control(&self, packet: RtpControlPacket) -> Result<()> {
         trace!(
             "control packet received {} {} {} {}",
             packet.timestamp,
@@ -100,14 +100,14 @@ impl RtspSession {
         Ok(())
     }
 
-    async fn handle_timing(&mut self, packet: RtpPacket) -> Result<()> {
+    async fn handle_timing(&self, packet: RtpPacket) -> Result<()> {
         trace!("timing packet received {} {:?}", packet.payload_type, packet.payload);
 
         Ok(())
     }
 
-    async fn handle_rtp(&mut self, packet: RtpPacket) -> Result<()> {
-        let stream_info = self.stream_info.as_mut().ok_or_else(|| anyhow!("unexpected rtp packet"))?;
+    async fn handle_rtp(&self, packet: RtpPacket) -> Result<()> {
+        let stream_info = self.stream_info.as_ref().ok_or_else(|| anyhow!("unexpected rtp packet"))?;
         if packet.payload_type != stream_info.rtp_type {
             return Err(anyhow!("Invalid rtp payload type"));
         }
