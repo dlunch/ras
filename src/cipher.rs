@@ -33,7 +33,7 @@ impl AppleChallenge {
         let mut challenge = base64::decode(challenge).unwrap();
         challenge.extend_from_slice(&self.ip_mac);
 
-        let response = KEY.sign(PaddingScheme::new_pkcs1v15_sign(None), &challenge)?;
+        let response = KEY.sign(PaddingScheme::new_pkcs1v15_sign_raw(), &challenge)?;
 
         Ok(base64::encode(response).replace('=', ""))
     }
