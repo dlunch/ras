@@ -72,7 +72,7 @@ impl Encoder<RtspResponse> for RtspCodec {
         dst.extend(format!("RTSP/1.0 {} {}\r\n", item.status as usize, item.status.as_string()).as_bytes());
 
         for (key, value) in &item.headers {
-            let header_line = format!("{}: {}\r\n", key, value);
+            let header_line = format!("{key}: {value}\r\n");
 
             dst.extend(header_line.as_bytes());
         }
