@@ -204,7 +204,7 @@ impl RtspSession {
                     let channels = codec.encoding_parameters.parse().ok()?;
                     Box::new(RawPCMDecoder::new(AudioFormat::S16BE, channels, codec.clock_rate).ok()?)
                 }
-                unk => panic!("Unknown codec {:?}", unk),
+                unk => panic!("Unknown codec {unk:?}"),
             };
 
             let rsaaeskey = media_description.attribute("rsaaeskey");
