@@ -1546,7 +1546,7 @@ dependencies = [
 [[package]]
 name = "simple_mdns"
 version = "0.1.0"
-source = "git+https://github.com/dlunch/mdns#c91b858548e2407209adac0b9f41bafecbc3d058"
+source = "git+https://github.com/dlunch/mdns#d9c284d02fc584bbe4b0b2fb0e3bad561b3f59a7"
 dependencies = [
  "anyhow",
  "bitflags",
