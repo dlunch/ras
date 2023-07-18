@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io, str, sync::Arc};
+use std::{collections::HashMap, io, rc::Rc, str};
 
 use anyhow::{anyhow, Result};
 use futures::{select, SinkExt, StreamExt};
@@ -21,7 +21,7 @@ struct StreamInfo {
     rtp_type: u8,
     decoder: Box<dyn Decoder>,
     cipher: Option<RsaAesCipher>,
-    session: Arc<dyn AudioSinkSession>,
+    session: Rc<dyn AudioSinkSession>,
 }
 
 pub struct RtspSession {
@@ -30,12 +30,12 @@ pub struct RtspSession {
     control_port: u16,
     timing_port: u16,
     apple_challenge: AppleChallenge,
-    session: Arc<dyn AudioSinkSession>,
+    session: Rc<dyn AudioSinkSession>,
     stream_info: Option<StreamInfo>,
 }
 
 impl RtspSession {
-    pub async fn start(id: u32, rtsp: TcpStream, session: Arc<dyn AudioSinkSession>, mac_address: MacAddress) -> Result<()> {
+    pub async fn start(id: u32, rtsp: TcpStream, session: Rc<dyn AudioSinkSession>, mac_address: MacAddress) -> Result<()> {
         let rtp = UdpSocket::bind("0.0.0.0:0").await?;
         let control = UdpSocket::bind("0.0.0.0:0").await?;
         let timing = UdpSocket::bind("0.0.0.0:0").await?;

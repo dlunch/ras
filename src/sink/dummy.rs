@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::rc::Rc;
 
 use anyhow::Result;
 use log::trace;
@@ -14,8 +14,8 @@ impl DummyAudioSink {
 }
 
 impl AudioSink for DummyAudioSink {
-    fn start(&self) -> Result<Arc<dyn AudioSinkSession>> {
-        Ok(Arc::new(DummyAudioSinkSession {}))
+    fn start(&self) -> Result<Rc<dyn AudioSinkSession>> {
+        Ok(Rc::new(DummyAudioSinkSession {}))
     }
 }
 

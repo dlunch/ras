@@ -1,7 +1,7 @@
 mod dummy;
 mod rodio;
 
-use std::sync::Arc;
+use std::rc::Rc;
 
 use anyhow::Result;
 
@@ -12,7 +12,7 @@ pub enum AudioFormat {
 }
 
 pub trait AudioSink {
-    fn start(&self) -> Result<Arc<dyn AudioSinkSession>>;
+    fn start(&self) -> Result<Rc<dyn AudioSinkSession>>;
 }
 
 pub trait AudioSinkSession: Send + Sync {
@@ -20,10 +20,10 @@ pub trait AudioSinkSession: Send + Sync {
     fn set_volume(&self, volume: f32);
 }
 
-pub fn create(sink: &str) -> Arc<dyn AudioSink> {
+pub fn create(sink: &str) -> Rc<dyn AudioSink> {
     match sink {
-        "dummy" => Arc::new(dummy::DummyAudioSink::new()),
-        "rodio" => Arc::new(rodio::RodioAudioSink::new()),
+        "dummy" => Rc::new(dummy::DummyAudioSink::new()),
+        "rodio" => Rc::new(rodio::RodioAudioSink::new()),
         _ => panic!("Unknown sink"),
     }
 }

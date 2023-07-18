@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::rc::Rc;
 
 use anyhow::Result;
 use cfg_if::cfg_if;
@@ -21,10 +21,10 @@ impl RodioAudioSink {
 }
 
 impl AudioSink for RodioAudioSink {
-    fn start(&self) -> Result<Arc<dyn AudioSinkSession>> {
+    fn start(&self) -> Result<Rc<dyn AudioSinkSession>> {
         let sink = Sink::try_new(&self.stream_handle)?;
 
-        Ok(Arc::new(RodioAudioSinkSession::new(sink)?))
+        Ok(Rc::new(RodioAudioSinkSession::new(sink)?))
     }
 }
 

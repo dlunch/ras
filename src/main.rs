@@ -13,7 +13,10 @@ use clap::Parser;
 use futures::StreamExt;
 use log::{debug, error};
 use mac_address::get_mac_address;
-use tokio::{net::TcpListener, task::spawn};
+use tokio::{
+    net::TcpListener,
+    task::{spawn, spawn_local},
+};
 use tokio_stream::wrappers::TcpListenerStream;
 
 #[derive(Parser, Debug)]
@@ -70,7 +73,7 @@ async fn main() -> Result<()> {
         let stream = stream?;
 
         let audio_session = audio_sink.start()?;
-        spawn(async move {
+        spawn_local(async move {
             let result = rtsp_session::RtspSession::start(id, stream, audio_session, mac_address).await;
 
             if let Err(err) = result {
