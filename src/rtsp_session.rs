@@ -143,7 +143,7 @@ impl RtspSession {
             "TEARDOWN" => Ok(RtspResponse::new(RtspStatusCode::Ok)),
             "OPTIONS" => self.handle_options(request).await,
             "GET_PARAMETER" => Ok(RtspResponse::new(RtspStatusCode::Ok)),
-            "SET_PARAMETER" => Ok(RtspResponse::new(RtspStatusCode::Ok)),
+            "SET_PARAMETER" => self.handle_set_parameter(request).await,
             "POST" => Ok(RtspResponse::new(RtspStatusCode::NotFound)),
             "GET" => Ok(RtspResponse::new(RtspStatusCode::NotFound)),
             _ => {
@@ -177,6 +177,40 @@ impl RtspSession {
                 "Public" => "ANNOUNCE, SETUP, RECORD, PAUSE, FLUSH, TEARDOWN, OPTIONS, GET_PARAMETER, SET_PARAMETER, POST, GET".into()
             },
         ))
+    }
+
+    async fn handle_set_parameter(&mut self, request: &RtspRequest) -> Result<RtspResponse> {
+        let content_type = request.headers.get("Content-Type");
+        if content_type.is_none() {
+            return Ok(RtspResponse::new(RtspStatusCode::BadRequest));
+        }
+
+        let content_type = content_type.unwrap();
+
+        if content_type == "text/parameters" {
+            for line in str::from_utf8(&request.content).unwrap().lines() {
+                let split = line.split(':').collect::<Vec<_>>();
+
+                let (key, value) = (split[0].trim().to_owned(), split[1].trim().to_owned());
+
+                match key.as_ref() {
+                    "volume" => {
+                        log::debug!("Set volume {}", value);
+                        let volume = value.parse::<f32>().unwrap();
+
+                        self.session.set_volume(volume);
+                    }
+                    _ => {
+                        log::warn!("Unhandled SET_PARAMETER key {:?}", key);
+                    }
+                }
+            }
+
+            Ok(RtspResponse::new(RtspStatusCode::Ok))
+        } else {
+            log::warn!("Unhandled SET_PARAMETER type {:?}", content_type);
+            Ok(RtspResponse::new(RtspStatusCode::Ok))
+        }
     }
 
     async fn handle_announce(&mut self, request: &RtspRequest) -> Result<RtspResponse> {

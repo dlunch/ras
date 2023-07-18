@@ -27,4 +27,8 @@ impl AudioSinkSession for DummyAudioSinkSession {
 
         Ok(())
     }
+
+    fn set_volume(&self, volume: f32) {
+        trace!("DummyAudioSink::set_volume {:?}", volume);
+    }
 }

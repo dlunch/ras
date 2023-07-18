@@ -62,4 +62,12 @@ impl AudioSinkSession for RodioAudioSinkSession {
 
         Ok(())
     }
+
+    fn set_volume(&self, volume: f32) {
+        // airplay volume: -30.0 ~ 0.0, -144: mute, -20: default
+        // it's in decibel, but i'm lazy to convert it correctly into linear scale..
+        let volume = if volume == -144.0 { 0.0 } else { 1.0 + (volume / 30.0) };
+
+        self.sink.set_volume(volume);
+    }
 }
