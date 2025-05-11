@@ -33,6 +33,8 @@ struct Args {
 async fn main() -> Result<()> {
     pretty_env_logger::init();
 
+    let local_set = tokio::task::LocalSet::new();
+
     let args = Args::parse();
 
     debug!("{:?}", args);
@@ -68,23 +70,29 @@ async fn main() -> Result<()> {
     let listener = TcpListener::bind(addr).await?;
     let mut incoming = TcpListenerStream::new(listener);
 
-    let mut id = 1;
-    while let Some(stream) = incoming.next().await {
-        let stream = stream?;
+    local_set
+        .run_until(async move {
+            let mut id = 1;
+            while let Some(stream) = incoming.next().await {
+                let stream = stream?;
 
-        let audio_session = audio_sink.start()?;
-        spawn_local(async move {
-            let result = rtsp_session::RtspSession::start(id, stream, audio_session, mac_address).await;
+                let audio_session = audio_sink.start()?;
+                spawn_local(async move {
+                    let result = rtsp_session::RtspSession::start(id, stream, audio_session, mac_address).await;
 
-            if let Err(err) = result {
-                error!("{:?}", err);
+                    if let Err(err) = result {
+                        error!("{:?}", err);
+                    }
+                });
+
+                id += 1;
             }
-        });
 
-        id += 1;
-    }
+            mdns_join_handle.await??;
 
-    mdns_join_handle.await??;
+            anyhow::Ok(())
+        })
+        .await?;
 
     Ok(())
 }
