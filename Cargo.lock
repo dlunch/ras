@@ -895,6 +895,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ffbee8634e0d45d258acb448e7eaab3fce7a0a467395d4d9f228e3c1f01fb2e4"
 
 [[package]]
+name = "mdns-responder"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a41a49132b2f5ee232aef309a46833496e8dee4ee75a5600fca9d4e2f8da5185"
+dependencies = [
+ "anyhow",
+ "bitflags 1.3.2",
+ "cidr-utils",
+ "hostname",
+ "if-addrs",
+ "lazy_static",
+ "libc",
+ "log",
+ "nix 0.26.2",
+ "tokio",
+ "windows 0.44.0",
+]
+
+[[package]]
 name = "memchr"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1351,13 +1370,13 @@ dependencies = [
  "log",
  "mac_address",
  "maplit",
+ "mdns-responder",
  "pretty_env_logger",
  "rodio",
  "rsa",
  "rtp-rs",
  "sdp",
  "sha-1",
- "simple_mdns",
  "symphonia",
  "tokio",
  "tokio-stream",
@@ -1603,24 +1622,6 @@ checksum = "74233d3b3b2f6d4b006dc19dee745e73e2a6bfb6f93607cd3b02bd5b00797d7c"
 dependencies = [
  "digest",
  "rand_core",
-]
-
-[[package]]
-name = "simple_mdns"
-version = "0.1.0"
-source = "git+https://github.com/dlunch/mdns#0b4e61d9ff3232ab6a7a468f41b115ade5ef908b"
-dependencies = [
- "anyhow",
- "bitflags 1.3.2",
- "cidr-utils",
- "hostname",
- "if-addrs",
- "lazy_static",
- "libc",
- "log",
- "nix 0.26.2",
- "tokio",
- "windows 0.44.0",
 ]
 
 [[package]]

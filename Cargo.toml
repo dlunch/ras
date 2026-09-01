@@ -3,6 +3,9 @@ name = "ras"
 version = "0.1.1"
 authors = ["Inseok Lee <dlunch@gmail.com>"]
 edition = "2021"
+description = "A Rust AirPlay server implementing the RAOP protocol"
+license = "MIT"
+repository = "https://github.com/dlunch/ras"
 
 [dependencies]
 tokio = { version = "^1.19", features = ["full"] }
@@ -27,4 +30,4 @@ sha-1 = { version = "^0.10" }
 aes = { version = "^0.8" }
 cbc = { version = "^0.1" }
 lazy_static = { version = "^1.4" }
-simple_mdns = { version = "^0.1", git = "https://github.com/dlunch/mdns" }
+mdns-responder = { version = "^0.1" }

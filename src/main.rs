@@ -43,7 +43,7 @@ async fn main() -> Result<()> {
     debug!("Mac address: {}", mac_address);
 
     let mdns_join_handle = spawn(async move {
-        let service = simple_mdns::Service::new(
+        let service = mdns_responder::Service::new(
             "_raop._tcp",
             &format!("{}@{}", mac_address.to_string().replace(':', ""), args.server_name),
             args.port,
@@ -60,7 +60,7 @@ async fn main() -> Result<()> {
                 "vn=65537",  // required, unknown
             ],
         );
-        let server = simple_mdns::Server::new(vec![service]).unwrap();
+        let server = mdns_responder::Server::new(vec![service]).unwrap();
         server.serve().await
     });
 
